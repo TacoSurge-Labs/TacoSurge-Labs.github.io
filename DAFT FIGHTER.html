@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DAFT FIGHTER</title>
+    <style>
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            overflow: hidden; background: #000; 
+            font-family: 'Arial Black', sans-serif; 
+        }
+        canvas { display: block; }
+        
+        /* UI OVERLAY */
+        #ui {
+            position: absolute; top: 30px; width: 100%; 
+            display: flex; justify-content: space-around; 
+            pointer-events: none; z-index: 10; visibility: hidden;
+        }
+        .hud-box { width: 40%; }
+        .bar-frame { 
+            height: 40px; background: #111; border: 4px solid #fff; 
+            box-shadow: 0 0 20px rgba(255,255,255,0.3); transform: skewX(-20deg);
+        }
+        .hp-fill { height: 100%; width: 100%; transition: width 0.1s linear; }
+        #p1-hp { background: linear-gradient(90deg, #b8860b, #ffd700); box-shadow: 0 0 30px #ffd700; }
+        #p2-hp { background: linear-gradient(90deg, #666, #fff); box-shadow: 0 0 30px #fff; }
+        .name-tag { 
+            color: white; font-size: 24px; margin-bottom: 5px; 
+            text-shadow: 0 0 10px white; transform: skewX(-20deg); display: inline-block;
+        }
+
+        /* SCREENS */
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.9); z-index: 100; color: white;
+        }
+        h1 { font-size: 80px; letter-spacing: 10px; margin: 0; text-shadow: 4px 4px 0 #ff00ff; }
+        button {
+            margin-top: 40px; padding: 20px 50px; font-size: 24px; 
+            background: transparent; color: #0ff; border: 2px solid #0ff;
+            cursor: pointer; text-transform: uppercase; letter-spacing: 5px;
+            box-shadow: 0 0 20px #0ff; transition: 0.2s; font-family: inherit;
+        }
+        button:hover { background: #0ff; color: #000; box-shadow: 0 0 50px #0ff; }
+        
+        #victory-screen { display: none; background: rgba(0,0,0,0.85); }
+        .winner-text { font-size: 100px; color: #ffd700; text-shadow: 0 0 30px #ffd700; }
+    </style>
+</head>
+<body>
+
+    <div id="start-screen" class="screen">
+        <h1>DAFT FIGHTER</h1>
+        <button onclick="startGame()">INITIATE PROGRAM</button>
+        <p style="font-size: 14px; margin-top: 30px; color: #555;">P1: WASD + SPACE | P2: ARROWS + ENTER</p>
+    </div>
+
+    <div id="victory-screen" class="screen">
+        <div id="winner-name" class="winner-text">GM08 WINS</div>
+        <button onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+
+    <div id="ui">
+        <div class="hud-box">
+            <div class="name-tag" style="color:#ffd700">GM08</div>
+            <div class="bar-frame"><div id="p1-hp" class="hp-fill"></div></div>
+        </div>
+        <div class="hud-box" style="text-align: right;">
+            <div class="name-tag" style="color:#c0c0c0">TB3</div>
+            <div class="bar-frame"><div id="p2-hp" class="hp-fill"></div></div>
+        </div>
+    </div>
+
+    <canvas id="game"></canvas>
+    <div id="yt-player"></div>
+
+<script>
+    /* --- AUDIO ENGINE --- */
+    let player;
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+
+    function onYouTubeIframeAPIReady() {
+        player = new YT.Player('yt-player', {
+            height: '0', width: '0', videoId: 'oNJpMkgFfzA',
+            playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': 'oNJpMkgFfzA' },
+            events: { 'onReady': (e) => e.target.setVolume(100) }
+        });
+    }
+
+    /* --- GAME ENGINE --- */
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    
+    let gameRunning = false;
+    let shake = 0;
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    class Fighter {
+        constructor(name, x, color) {
+            this.name = name;
+            this.startPos = x;
+            this.pos = { x: x, y: 100 };
+            this.vel = { x: 0, y: 0 };
+            this.w = 100; this.h = 220;
+            this.color = color;
+            this.hp = 100;
+            this.isAttacking = false;
+            this.facingRight = (x < canvas.width/2);
+        }
+
+        reset() {
+            this.pos.x = this.startPos;
+            this.pos.y = 100;
+            this.hp = 100;
+            this.vel = { x:0, y:0 };
+            this.isAttacking = false;
+        }
+
+        draw() {
+            ctx.save();
+            
+            // Directional Logic
+            if (this.vel.x > 0) this.facingRight = true;
+            if (this.vel.x < 0) this.facingRight = false;
+            
+            // 1. Draw Glow
+            ctx.shadowBlur = 30;
+            ctx.shadowColor = this.color;
+
+            // 2. Body Gradient (Metallic)
+            let grad = ctx.createLinearGradient(this.pos.x, this.pos.y, this.pos.x + this.w, this.pos.y);
+            grad.addColorStop(0, "#222");
+            grad.addColorStop(0.2, this.color);
+            grad.addColorStop(0.5, "#fff"); // Shine
+            grad.addColorStop(0.8, this.color);
+            grad.addColorStop(1, "#222");
+
+            ctx.fillStyle = grad;
+
+            // 3. DRAW CHARACTER BASED ON NAME
+            if (this.name === 'GM08') {
+                this.drawGM08(ctx);
+            } else {
+                this.drawTB3(ctx);
+            }
+
+            // 4. Attack Visuals
+            if (this.isAttacking) {
+                ctx.fillStyle = "#fff";
+                ctx.globalAlpha = 0.6;
+                let punchX = this.facingRight ? this.pos.x + this.w : this.pos.x - 60;
+                ctx.fillRect(punchX, this.pos.y + 80, 60, 60); // Fist hitbox visual
+            }
+
+            ctx.restore();
+        }
+
+        drawGM08(c) {
+            // GOLD ROBOT - Round Helmet
+            // Body
+            c.fillRect(this.pos.x + 10, this.pos.y + 60, this.w - 20, this.h - 60);
+            
+            // Head (Sphere)
+            c.beginPath();
+            c.arc(this.pos.x + this.w/2, this.pos.y + 40, 45, 0, Math.PI*2);
+            c.fill();
+            
+            // Visor (Black Curve)
+            c.fillStyle = "#000";
+            c.beginPath();
+            c.ellipse(this.pos.x + this.w/2, this.pos.y + 40, 40, 25, 0, 0, Math.PI*2);
+            c.fill();
+            
+            // Rainbow LEDs inside visor (The Discovery Era look)
+            if (Math.random() > 0.5) {
+                c.fillStyle = `hsl(${Date.now() % 360}, 100%, 50%)`;
+                c.fillRect(this.pos.x + 30, this.pos.y + 35, 40, 5);
+            }
+        }
+
+        drawTB3(c) {
+            // SILVER ROBOT - Tall Helmet
+            // Body
+            c.fillRect(this.pos.x + 15, this.pos.y + 70, this.w - 30, this.h - 70);
+
+            // Head (Tall Rounded Rect)
+            c.beginPath();
+            c.moveTo(this.pos.x + 10, this.pos.y + 70);
+            c.lineTo(this.pos.x + 10, this.pos.y + 20);
+            c.bezierCurveTo(this.pos.x + 10, this.pos.y - 10, this.pos.x + this.w - 10, this.pos.y - 10, this.pos.x + this.w - 10, this.pos.y + 20);
+            c.lineTo(this.pos.x + this.w - 10, this.pos.y + 70);
+            c.fill();
+
+            // Visor (Sleek T-Shape or Slit)
+            c.fillStyle = "#000";
+            c.fillRect(this.pos.x + 12, this.pos.y + 25, this.w - 24, 30);
+            
+            // Red LED Text scrolling
+            c.fillStyle = "#f00";
+            let offset = (Date.now() / 5) % 40;
+            c.fillRect(this.pos.x + 20 + offset, this.pos.y + 38, 10, 4);
+        }
+
+        update() {
+            this.pos.x += this.vel.x;
+            this.pos.y += this.vel.y;
+
+            // Gravity
+            if (this.pos.y + this.h < canvas.height - 50) {
+                this.vel.y += 1.5;
+            } else {
+                this.vel.y = 0;
+                this.pos.y = canvas.height - 50 - this.h;
+            }
+
+            // Screen Boundaries
+            if (this.pos.x < 0) this.pos.x = 0;
+            if (this.pos.x > canvas.width - this.w) this.pos.x = canvas.width - this.w;
+
+            this.draw();
+        }
+    }
+
+    const p1 = new Fighter('GM08', 150, '#FFD700');
+    const p2 = new Fighter('TB3', canvas.width - 250, '#C0C0C0');
+    const keys = {};
+
+    window.onkeydown = (e) => keys[e.code] = true;
+    window.onkeyup = (e) => keys[e.code] = false;
+
+    function startGame() {
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('ui').style.visibility = 'visible';
+        if(player) player.playVideo();
+        gameRunning = true;
+        animate();
+    }
+
+    function resetGame() {
+        p1.reset();
+        p2.reset();
+        document.getElementById('p1-hp').style.width = '100%';
+        document.getElementById('p2-hp').style.width = '100%';
+        document.getElementById('victory-screen').style.display = 'none';
+        gameRunning = true;
+        animate();
+    }
+
+    function checkWin() {
+        if (p1.hp <= 0 || p2.hp <= 0) {
+            gameRunning = false;
+            let winner = p1.hp > 0 ? "GM08" : "TB3";
+            let color = p1.hp > 0 ? "#FFD700" : "#C0C0C0";
+            
+            document.getElementById('winner-name').innerText = winner + " WINS";
+            document.getElementById('winner-name').style.color = color;
+            document.getElementById('victory-screen').style.display = 'flex';
+        }
+    }
+
+    function animate() {
+        if (!gameRunning) return;
+
+        // 1. Background
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Screen Shake
+        if (shake > 0) {
+            ctx.save();
+            ctx.translate(Math.random() * shake - shake/2, Math.random() * shake - shake/2);
+            shake *= 0.9;
+        }
+
+        // Grid Floor
+        ctx.strokeStyle = "#222";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < canvas.width; i+=80) {
+            ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height);
+        }
+        for (let j = 0; j < canvas.height; j+=80) {
+            ctx.moveTo(0, j); ctx.lineTo(canvas.width, j);
+        }
+        ctx.stroke();
+
+        // 2. Input Handling
+        // P1 Controls
+        p1.vel.x = 0;
+        if (keys['KeyA']) p1.vel.x = -10;
+        if (keys['KeyD']) p1.vel.x = 10;
+        if (keys['KeyW'] && p1.vel.y === 0) p1.vel.y = -35; // Jump
+        p1.isAttacking = keys['Space'];
+
+        // P2 Controls
+        p2.vel.x = 0;
+        if (keys['ArrowLeft']) p2.vel.x = -10;
+        if (keys['ArrowRight']) p2.vel.x = 10;
+        if (keys['ArrowUp'] && p2.vel.y === 0) p2.vel.y = -35;
+        p2.isAttacking = keys['Enter'];
+
+        // 3. Combat Logic
+        // Simple hitbox: If attacking AND close enough
+        if (p1.isAttacking && Math.abs(p1.pos.x - p2.pos.x) < 150 && Math.abs(p1.pos.y - p2.pos.y) < 100) {
+            p2.hp -= 0.8;
+            shake = 10;
+            document.getElementById('p2-hp').style.width = Math.max(0, p2.hp) + "%";
+        }
+
+        if (p2.isAttacking && Math.abs(p2.pos.x - p1.pos.x) < 150 && Math.abs(p2.pos.y - p1.pos.y) < 100) {
+            p1.hp -= 0.8;
+            shake = 10;
+            document.getElementById('p1-hp').style.width = Math.max(0, p1.hp) + "%";
+        }
+
+        // 4. Update & Draw
+        p1.update();
+        p2.update();
+
+        if (shake > 0) ctx.restore();
+
+        checkWin();
+        requestAnimationFrame(animate);
+    }
+</script>
+</body>
+</html>
