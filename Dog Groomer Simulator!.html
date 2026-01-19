@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Dog Groomer Simulator!</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; }
+        #ui {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: #2c3e50;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #score-board { 
+            font-size: 2.5rem; 
+            font-weight: 900; 
+            text-shadow: 2px 2px 0px white;
+            margin: 0;
+        }
+        #progress-container {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 350px;
+            height: 25px;
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 3px solid white;
+            overflow: hidden;
+        }
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            transition: width 0.2s;
+        }
+        .label { font-weight: bold; color: white; text-transform: uppercase; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <p class="label">Dog Groomer Simulator!</p>
+        <h1 id="score-board">Cleaned: 0</h1>
+    </div>
+
+    <div id="progress-container">
+        <div id="progress-bar"></div>
+    </div>
+
+    <script>
+        // --- CONFIG & STATE ---
+        let score = 0;
+        let cleanliness = 0;
+        let isScrubbing = false;
+        const dogColors = [0xC0A080, 0x443322, 0xEEEEEE, 0x222222];
+
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 6);
+        camera.lookAt(0, 1, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // --- LIGHTING ---
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
+        scene.add(hemiLight);
+
+        const spotLight = new THREE.SpotLight(0xffffff, 50);
+        spotLight.position.set(5, 10, 5);
+        spotLight.castShadow = true;
+        scene.add(spotLight);
+
+        // --- ENVIRONMENT ---
+        // Tiled Floor
+        const floorGeo = new THREE.PlaneGeometry(100, 100);
+        const floorMat = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, 
+            roughness: 0.1, 
+            metalness: 0.1 
+        });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Grooming Table
+        const tableGroup = new THREE.Group();
+        const topGeo = new THREE.CylinderGeometry(2.5, 2.5, 0.2, 32);
+        const topMat = new THREE.MeshStandardMaterial({ color: 0x34495e });
+        const tableTop = new THREE.Mesh(topGeo, topMat);
+        tableTop.position.y = 1.5;
+        tableTop.receiveShadow = true;
+        tableGroup.add(tableTop);
+
+        const legGeo = new THREE.CylinderGeometry(0.2, 0.2, 1.5, 16);
+        const legMat = new THREE.MeshStandardMaterial({ color: 0xbdc3c7, metalness: 0.8 });
+        const leg = new THREE.Mesh(legGeo, legMat);
+        leg.position.y = 0.75;
+        tableGroup.add(leg);
+        scene.add(tableGroup);
+
+        // --- THE "REALISTIC" DOG ---
+        const dogGroup = new THREE.Group();
+        dogGroup.position.y = 1.6;
+        let dirtMeshes = [];
+
+        function createDog() {
+            while(dogGroup.children.length > 0) dogGroup.remove(dogGroup.children[0]);
+            dirtMeshes = [];
+
+            const color = dogColors[Math.floor(Math.random() * dogColors.length)];
+            const bodyMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+            const dirtMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, transparent: true, opacity: 0.8 });
+
+            function createPart(geometry, x, y, z, rx=0, ry=0, rz=0) {
+                const mesh = new THREE.Mesh(geometry, bodyMat);
+                mesh.position.set(x, y, z);
+                mesh.rotation.set(rx, ry, rz);
+                mesh.castShadow = true;
+                dogGroup.add(mesh);
+
+                // Dirt layer (slightly larger)
+                const dirtGeo = geometry.clone();
+                dirtGeo.scale(1.05, 1.05, 1.05);
+                const dMesh = new THREE.Mesh(dirtGeo, dirtMat);
+                dMesh.position.set(x, y, z);
+                dMesh.rotation.set(rx, ry, rz);
+                dogGroup.add(dMesh);
+                dirtMeshes.push(dMesh);
+            }
+
+            // Body (Capsule)
+            createPart(new THREE.CapsuleGeometry(0.5, 1, 4, 16), 0, 0.6, 0, Math.PI/2, 0, 0);
+            // Head
+            createPart(new THREE.SphereGeometry(0.45, 32, 32), 0, 1.2, 0.8);
+            // Snout
+            createPart(new THREE.CapsuleGeometry(0.2, 0.3, 4, 16), 0, 1.1, 1.2, Math.PI/2, 0, 0);
+            // Ears
+            createPart(new THREE.CapsuleGeometry(0.1, 0.4, 4, 16), 0.35, 1.5, 0.7, 0, 0, 0.3);
+            createPart(new THREE.CapsuleGeometry(0.1, 0.4, 4, 16), -0.35, 1.5, 0.7, 0, 0, -0.3);
+            // Legs
+            createPart(new THREE.CapsuleGeometry(0.15, 0.6, 4, 16), 0.3, 0.3, 0.5);
+            createPart(new THREE.CapsuleGeometry(0.15, 0.6, 4, 16), -0.3, 0.3, 0.5);
+            createPart(new THREE.CapsuleGeometry(0.15, 0.6, 4, 16), 0.3, 0.3, -0.5);
+            createPart(new THREE.CapsuleGeometry(0.15, 0.6, 4, 16), -0.3, 0.3, -0.5);
+            // Tail
+            createPart(new THREE.CapsuleGeometry(0.1, 0.5, 4, 16), 0, 0.8, -0.8, -0.5, 0, 0);
+
+            scene.add(dogGroup);
+        }
+
+        createDog();
+
+        // --- SCRUBBING SYSTEM ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function handleMove(e) {
+            if (!isScrubbing) return;
+            const x = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+            const y = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+            
+            mouse.x = (x / window.innerWidth) * 2 - 1;
+            mouse.y = -(y / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(dogGroup.children);
+
+            if (hits.length > 0) {
+                cleanliness += 0.6;
+                updateGame();
+                spawnEffect(hits[0].point);
+            }
+        }
+
+        function updateGame() {
+            const progress = Math.min(cleanliness, 100);
+            document.getElementById('progress-bar').style.width = progress + '%';
+
+            dirtMeshes.forEach(m => m.material.opacity = 0.8 - (progress / 100) * 0.8);
+
+            if (cleanliness >= 100) {
+                score++;
+                document.getElementById('score-board').innerText = `Cleaned: ${score}`;
+                cleanliness = 0;
+                finishDog();
+            }
+        }
+
+        function spawnEffect(pos) {
+            const bubbleGeo = new THREE.SphereGeometry(0.08, 8, 8);
+            const bubbleMat = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+            const bubble = new THREE.Mesh(bubbleGeo, bubbleMat);
+            bubble.position.copy(pos);
+            scene.add(bubble);
+
+            const vy = 0.02 + Math.random() * 0.03;
+            function anim() {
+                bubble.position.y += vy;
+                bubble.scale.multiplyScalar(0.97);
+                if (bubble.scale.x > 0.01) requestAnimationFrame(anim);
+                else scene.remove(bubble);
+            }
+            anim();
+        }
+
+        function finishDog() {
+            isScrubbing = false;
+            // Celebration Jump
+            let startTime = Date.now();
+            function jump() {
+                let elapsed = Date.now() - startTime;
+                dogGroup.position.y = 1.6 + Math.abs(Math.sin(elapsed * 0.01)) * 0.5;
+                dogGroup.rotation.y += 0.1;
+                if (elapsed < 1000) requestAnimationFrame(jump);
+                else {
+                    dogGroup.position.y = 1.6;
+                    createDog();
+                }
+            }
+            jump();
+        }
+
+        // --- LISTENERS ---
+        window.addEventListener('mousedown', () => isScrubbing = true);
+        window.addEventListener('mouseup', () => isScrubbing = false);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('touchstart', () => isScrubbing = true);
+        window.addEventListener('touchend', () => isScrubbing = false);
+        window.addEventListener('touchmove', (e) => { e.preventDefault(); handleMove(e); }, { passive: false });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- MAIN LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!isScrubbing) {
+                dogGroup.rotation.y += 0.005; // Idle spin
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+
+    </script>
+</body>
+</html>
