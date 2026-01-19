@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Star Wars: Red Five Run</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Orbitron', sans-serif; user-select: none; }
+        
+        /* UI OVERLAY */
+        #hud {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+
+        .top-bar {
+            display: flex; justify-content: space-between; padding: 20px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+        }
+        .metric { text-shadow: 0 0 10px #00e5ff; color: #fff; }
+        .label { font-size: 12px; color: #aaa; letter-spacing: 2px; }
+        .value { font-size: 30px; font-weight: 900; color: #fff; }
+
+        #speed-gauge {
+            position: absolute; bottom: 30px; right: 30px;
+            text-align: right;
+        }
+        #speed-val { font-size: 60px; color: #ffeb3b; text-shadow: 0 0 20px #ffeb3b; font-style: italic; }
+        .unit { font-size: 14px; color: #888; }
+
+        #shield-bar-container {
+            position: absolute; bottom: 30px; left: 30px;
+            width: 300px; height: 20px;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid #fff;
+            transform: skewX(-20deg);
+        }
+        #shield-fill {
+            width: 100%; height: 100%;
+            background: #00ff41;
+            box-shadow: 0 0 15px #00ff41;
+            transition: width 0.2s, background 0.2s;
+        }
+
+        /* START SCREEN */
+        #start-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            pointer-events: auto; z-index: 10;
+        }
+        h1 { font-size: 60px; color: #ffe81f; text-transform: uppercase; letter-spacing: 10px; margin: 0; text-shadow: 0 0 30px #ffe81f; text-align: center;}
+        p { color: #fff; letter-spacing: 2px; margin-top: 20px; font-size: 14px; }
+        
+        button {
+            margin-top: 40px; padding: 15px 50px;
+            font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 20px;
+            color: #000; background: #00e5ff; border: none;
+            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%);
+            cursor: pointer; transition: transform 0.1s;
+            box-shadow: 0 0 20px #00e5ff;
+        }
+        button:hover { transform: scale(1.1); background: #fff; }
+        button:disabled { background: #555; color: #888; cursor: wait; transform: none; box-shadow: none; }
+
+        .loader {
+            width: 300px; height: 4px; background: #333; margin-top: 20px;
+            position: relative; overflow: hidden;
+        }
+        .loader-bar {
+            position: absolute; top: 0; left: 0; height: 100%; width: 0%;
+            background: #ffe81f; transition: width 0.5s;
+        }
+        
+        #damage-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            box-shadow: inset 0 0 0 0 rgba(255,0,0,0);
+            transition: box-shadow 0.1s;
+            pointer-events: none;
+        }
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-5px, -5px, 0); }
+            20%, 80% { transform: translate3d(5px, 5px, 0); }
+            30%, 50%, 70% { transform: translate3d(-5px, 5px, 0); }
+            40%, 60% { transform: translate3d(5px, -5px, 0); }
+        }
+
+        #status-text { margin-top: 15px; font-size: 12px; color: #666; font-family: monospace; }
+        
+        /* Audio Player is hidden but present in DOM */
+        #youtube-audio { position: absolute; top: -1000px; left: -1000px; }
+    </style>
+</head>
+<body>
+
+    <div id="damage-overlay"></div>
+    <div id="hud">
+        <div class="top-bar">
+            <div class="metric">
+                <div class="label">DISTANCE</div>
+                <div class="value" id="score">0</div>
+            </div>
+            <div class="metric" style="text-align:right">
+                <div class="label">TIME</div>
+                <div class="value" id="time">00:00</div>
+            </div>
+        </div>
+        <div id="shield-bar-container">
+            <div id="shield-fill"></div>
+        </div>
+        <div id="speed-gauge">
+            <div id="speed-val">0</div>
+            <div class="unit">KM/H</div>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <h1>RED FIVE<br>RUN</h1>
+        <p>ARROWS to Steer | SHIFT to Boost | SPACE to Fire</p>
+        <div class="loader"><div class="loader-bar" id="loader-bar"></div></div>
+        <button id="start-btn" onclick="startGame()" disabled>CONNECTING...</button>
+        <div id="status-text">Initializing Audio Link...</div>
+    </div>
+
+    <div id="youtube-audio"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- 1. AUDIO SYSTEM ---
+        let audioCtx;
+        let musicPlayer;
+        let isAudioInit = false;
+        let musicReady = false;
+
+        // A. Blaster Synthesizer (Web Audio API - No download needed)
+        function initAudioContext() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            isAudioInit = true;
+        }
+
+        function playBlasterSound() {
+            if (!isAudioInit || !audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            // Classic Star Wars blaster pitch drop
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime); 
+            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
+        }
+
+        // B. Background Music (YouTube API)
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        function onYouTubeIframeAPIReady() {
+            console.log("YouTube API Ready. Loading Video...");
+            musicPlayer = new YT.Player('youtube-audio', {
+                height: '10', width: '10',
+                // VIDEO ID UPDATED HERE:
+                videoId: 'Xz_wEXonNz4', 
+                playerVars: { 
+                    'playsinline': 1, 
+                    'controls': 0, 
+                    'loop': 1, 
+                    'playlist': 'Xz_wEXonNz4', // Required for looping
+                    'origin': window.location.origin // Helps with embedding security
+                },
+                events: {
+                    'onReady': onMusicReady,
+                    'onError': onMusicError,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        function onMusicReady(event) {
+            console.log("Video Loaded Successfully.");
+            musicReady = true;
+            enableGame("SYSTEMS ONLINE");
+            event.target.setVolume(50);
+        }
+
+        function onMusicError(event) {
+            console.error("YouTube Error Code:", event.data);
+            let errorMsg = "Music Blocked by YouTube.";
+            if(event.data === 150 || event.data === 101) errorMsg = "Video Owner Blocked Embeds.";
+            
+            musicReady = false;
+            enableGame("WARNING: " + errorMsg + " (Silent Mode)");
+        }
+        
+        function onPlayerStateChange(event) {
+            // If the video is playing (1), ensure volume is up
+            if (event.data == YT.PlayerState.PLAYING) {
+                // Video is actively playing
+            }
+        }
+
+        function enableGame(msg) {
+            const btn = document.getElementById('start-btn');
+            const status = document.getElementById('status-text');
+            const bar = document.getElementById('loader-bar');
+            
+            bar.style.width = "100%";
+            btn.disabled = false;
+            btn.innerText = "LAUNCH FIGHTER";
+            status.innerText = msg;
+            
+            if(msg.includes("WARNING")) status.style.color = "#ffaa00";
+            else status.style.color = "#00ff41";
+        }
+
+        // --- 2. GAME SETUP ---
+        const CONFIG = {
+            baseSpeed: 100, boostSpeed: 300, fogDensity: 0.002, fireRate: 150
+        };
+
+        let scene, camera, renderer, playerShip;
+        let obstacles = [], particles = [], lasers = [], explosions = [];
+        let gameActive = false, speed = 0, score = 0, health = 100;
+        let lastFireTime = 0, timeStart = 0;
+        let clock = new THREE.Clock();
+        const keys = { left: false, right: false, boost: false, fire: false };
+
+        function startGame() {
+            // 1. Initialize Blaster Audio
+            initAudioContext();
+            audioCtx.resume();
+            
+            // 2. Trigger Music
+            if(musicReady && musicPlayer && musicPlayer.playVideo) {
+                musicPlayer.playVideo();
+                // Safety check: sometimes browsers need a volume nudge
+                musicPlayer.setVolume(50);
+            }
+            
+            document.getElementById('start-screen').style.display = 'none';
+            gameActive = true;
+            initThreeJS();
+        }
+
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+            scene.fog = new THREE.FogExp2(0x000000, CONFIG.fogDensity);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 6, 25); 
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(50, 100, 50);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // Dynamic Light attached to ship
+            const shipLight = new THREE.PointLight(0xffeeaa, 0.5, 50);
+            shipLight.position.set(0, 5, 5);
+            scene.add(shipLight);
+
+            // Objects
+            createTrench();
+            playerShip = createDetailedXWing();
+            scene.add(playerShip);
+            createParticles();
+
+            // Inputs
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+            
+            timeStart = clock.getElapsedTime();
+            animate();
+        }
+
+        // --- 3. HIGH DETAIL ASSETS ---
+        function createDetailedXWing() {
+            const ship = new THREE.Group();
+
+            // Materials
+            const hullMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.5, metalness: 0.2 });
+            const redMat = new THREE.MeshStandardMaterial({ color: 0xaa0000, roughness: 0.5 });
+            const darkMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+            const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.8 });
+            const engineGlowMat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
+            const r2Mat = new THREE.MeshStandardMaterial({ color: 0x0000ff, roughness: 0.3 });
+            const r2HeadMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8 });
+
+            // 1. Fuselage
+            const fuseGeo = new THREE.BoxGeometry(1.2, 1.2, 8);
+            const fuselage = new THREE.Mesh(fuseGeo, hullMat);
+            fuselage.castShadow = true;
+            ship.add(fuselage);
+
+            // 2. Nose (Tapered)
+            const noseGeo = new THREE.CylinderGeometry(0.5, 1.2, 6, 8);
+            const nose = new THREE.Mesh(noseGeo, hullMat);
+            nose.rotation.x = Math.PI / 2; // Lay flat
+            nose.position.z = -7;
+            nose.castShadow = true;
+            ship.add(nose);
+
+            // 3. Cockpit
+            const cockGeo = new THREE.BoxGeometry(1, 0.8, 3);
+            const cockpit = new THREE.Mesh(cockGeo, cockpitMat);
+            cockpit.position.set(0, 0.6, -2);
+            ship.add(cockpit);
+
+            // 4. R2 Unit
+            const r2Body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.4), r2Mat);
+            r2Body.position.set(0, 0.8, 0.5);
+            ship.add(r2Body);
+            const r2Head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16, 0, Math.PI*2, 0, Math.PI/2), r2HeadMat);
+            r2Head.position.set(0, 1.0, 0.5);
+            ship.add(r2Head);
+
+            // 5. Wings (S-Foils) & Engines
+            const wingGeo = new THREE.BoxGeometry(3.5, 0.15, 4);
+            const engineGeo = new THREE.CylinderGeometry(0.5, 0.5, 3, 16);
+            const gunGeo = new THREE.CylinderGeometry(0.1, 0.1, 4);
+
+            [1, -1].forEach(side => { // Left vs Right
+                [1, -1].forEach(vertical => { // Top vs Bottom
+                    const wingGroup = new THREE.Group();
+                    
+                    // The Wing Blade
+                    const wing = new THREE.Mesh(wingGeo, hullMat);
+                    wing.position.x = 2.0 * side;
+                    wing.castShadow = true;
+                    wingGroup.add(wing);
+
+                    // Red Stripe
+                    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 2), redMat);
+                    stripe.position.x = 2.0 * side;
+                    stripe.position.z = 0;
+                    wingGroup.add(stripe);
+
+                    // Engine
+                    const engine = new THREE.Mesh(engineGeo, hullMat);
+                    engine.rotation.x = Math.PI/2;
+                    engine.position.x = 1.0 * side;
+                    engine.position.z = 1.5;
+                    wingGroup.add(engine);
+
+                    // Engine Intake (Front)
+                    const intake = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.1, 8, 16), darkMat);
+                    intake.position.set(1.0*side, 0, -0.1);
+                    wingGroup.add(intake);
+
+                    // Engine Glow (Back)
+                    const glow = new THREE.Mesh(new THREE.CircleGeometry(0.35, 16), engineGlowMat);
+                    glow.rotation.x = Math.PI; // Face back
+                    glow.position.set(1.0 * side, 0, 3.01);
+                    wingGroup.add(glow);
+
+                    // Laser Cannon
+                    const gun = new THREE.Mesh(gunGeo, darkMat);
+                    gun.rotation.x = Math.PI/2;
+                    gun.position.set(3.8 * side, 0, -2); // Tip of wing
+                    wingGroup.add(gun);
+
+                    // Position the whole group on the fuselage
+                    wingGroup.position.set(0, 0, 1);
+                    
+                    // Angle the S-Foils (Attack Position)
+                    const angle = 0.15 * vertical; // Radians
+                    wingGroup.rotation.z = angle * -side; // Mirror rotation for left/right
+
+                    ship.add(wingGroup);
+                });
+            });
+
+            return ship;
+        }
+
+        function createTIEFighter() {
+            const tie = new THREE.Group();
+            const gray = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6 });
+            const black = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
+            
+            // Cockpit Ball
+            const ball = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), gray);
+            tie.add(ball);
+            
+            // Window
+            const window = new THREE.Mesh(new THREE.CircleGeometry(0.9, 8), black);
+            window.position.z = -1.1;
+            window.rotation.y = Math.PI;
+            tie.add(window);
+
+            // Wing Struts
+            const wGeo = new THREE.CylinderGeometry(4, 4, 0.2, 6);
+            // Left Wing
+            const wL = new THREE.Mesh(wGeo, black); 
+            wL.rotation.set(Math.PI/2, Math.PI/2, 0); 
+            wL.position.x = 2.5; 
+            tie.add(wL);
+            // Right Wing
+            const wR = new THREE.Mesh(wGeo, black); 
+            wR.rotation.set(Math.PI/2, Math.PI/2, 0); 
+            wR.position.x = -2.5; 
+            tie.add(wR);
+
+            return tie;
+        }
+
+        function createTrench() {
+            const grid = new THREE.GridHelper(400, 50, 0x333333, 0x111111);
+            grid.position.y = -6; grid.scale.z = 10; scene.add(grid);
+            const wallGeo = new THREE.BoxGeometry(20, 80, 4000);
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+            const l = new THREE.Mesh(wallGeo, wallMat); l.position.set(-60, 0, -1000); scene.add(l);
+            const r = new THREE.Mesh(wallGeo, wallMat); r.position.set(60, 0, -1000); scene.add(r);
+        }
+
+        function createParticles() {
+            const geo = new THREE.BufferGeometry();
+            const verts = [];
+            for(let i=0; i<2000; i++) verts.push((Math.random()-0.5)*300, (Math.random()-0.5)*200, (Math.random()-0.5)*1000 - 500);
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+            const p = new THREE.Points(geo, new THREE.PointsMaterial({color:0xffffff, size:0.5}));
+            particles.push(p); scene.add(p);
+        }
+
+        // --- 4. GAME LOGIC ---
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!gameActive) return;
+
+            const dt = clock.getDelta();
+            
+            // Ship Movement
+            let targetSpeed = keys.boost ? CONFIG.boostSpeed : CONFIG.baseSpeed;
+            speed += (targetSpeed - speed) * 0.05;
+            let dir = keys.left ? -1 : (keys.right ? 1 : 0);
+            
+            playerShip.position.x += dir * dt * 50;
+            playerShip.position.x = Math.max(-45, Math.min(45, playerShip.position.x));
+            
+            // Bank logic (Roll)
+            const targetRoll = -dir * 0.6;
+            playerShip.rotation.z = THREE.MathUtils.lerp(playerShip.rotation.z, targetRoll, 0.1);
+            
+            playerShip.position.z -= speed * dt;
+            score += speed * dt * 0.1;
+
+            // Camera Follow with Lag
+            camera.position.x = THREE.MathUtils.lerp(camera.position.x, playerShip.position.x * 0.5, 0.1);
+            camera.position.z = playerShip.position.z + (keys.boost ? 20 : 25);
+            camera.lookAt(playerShip.position.x, 0, playerShip.position.z - 50);
+
+            // Logic
+            if (Math.random() < 0.05 + (speed/10000)) spawnObstacle();
+            if (keys.fire) fireWeapon();
+            updateLasers(dt);
+            updateObstacles(dt);
+            updateExplosions(dt);
+            updateHUD();
+
+            particles.forEach(p => p.position.z = playerShip.position.z);
+            renderer.render(scene, camera);
+        }
+
+        function fireWeapon() {
+            if (Date.now() - lastFireTime < CONFIG.fireRate) return;
+            lastFireTime = Date.now();
+            playBlasterSound();
+
+            // Fire from 4 wingtips
+            // Wingtip coordinates relative to ship center
+            const tips = [
+                {x:3.8, y:1}, {x:-3.8, y:1}, 
+                {x:3.8, y:-1}, {x:-3.8, y:-1}
+            ];
+
+            tips.forEach(p => {
+                const geo = new THREE.CylinderGeometry(0.1, 0.1, 6);
+                const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // RED LASERS
+                const l = new THREE.Mesh(geo, mat);
+                l.rotation.x = Math.PI/2;
+                
+                // Adjust for ship rotation
+                l.position.set(
+                    playerShip.position.x + p.x, 
+                    playerShip.position.y + p.y, 
+                    playerShip.position.z - 2
+                );
+                
+                scene.add(l); lasers.push(l);
+            });
+        }
+
+        function spawnObstacle() {
+            const z = playerShip.position.z - 800;
+            let obs;
+            if (Math.random() > 0.4) {
+                obs = createTIEFighter();
+                obs.position.set((Math.random()*70)-35, Math.random()*8, z);
+            } else {
+                obs = new THREE.Mesh(new THREE.BoxGeometry(8, Math.random()*30+10, 8), new THREE.MeshStandardMaterial({color:0x555555, roughness:0.8}));
+                obs.position.set((Math.random()*70)-35, 0, z);
+            }
+            obs.userData = { hp: 4 };
+            scene.add(obs); obstacles.push(obs);
+        }
+
+        function updateLasers(dt) {
+            for (let i = lasers.length - 1; i >= 0; i--) {
+                const l = lasers[i];
+                l.position.z -= 500 * dt; // Faster lasers
+                let hit = false;
+                for (let j = obstacles.length - 1; j >= 0; j--) {
+                    const ob = obstacles[j];
+                    if (l.position.distanceTo(ob.position) < 8) {
+                        hit = true; ob.userData.hp--;
+                        flashRed(ob);
+                        if(ob.userData.hp <= 0) destroy(ob, j);
+                        break;
+                    }
+                }
+                if (hit || l.position.z < playerShip.position.z - 600) { scene.remove(l); lasers.splice(i, 1); }
+            }
+        }
+
+        function updateObstacles(dt) {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const ob = obstacles[i];
+                // Hitbox logic
+                const dx = Math.abs(ob.position.x - playerShip.position.x);
+                const dz = Math.abs(ob.position.z - playerShip.position.z);
+                
+                if (dz < 5 && dx < 4) {
+                    takeDamage(); destroy(ob, i); continue;
+                }
+                if (ob.position.z > playerShip.position.z + 50) { scene.remove(ob); obstacles.splice(i, 1); }
+            }
+        }
+
+        function destroy(ob, index) {
+            const geo = new THREE.BufferGeometry();
+            const pos = [], vel = [];
+            for(let k=0; k<25; k++) {
+                pos.push(ob.position.x, ob.position.y, ob.position.z);
+                vel.push((Math.random()-0.5)*30, (Math.random()-0.5)*30, (Math.random()-0.5)*30);
+            }
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            const exp = new THREE.Points(geo, new THREE.PointsMaterial({color:0xffaa00, size:1.0}));
+            scene.add(exp); explosions.push({mesh:exp, vel:vel, age:0});
+            scene.remove(ob); obstacles.splice(index, 1);
+            score += 150;
+        }
+
+        function updateExplosions(dt) {
+            for(let i=explosions.length-1; i>=0; i--) {
+                const e = explosions[i]; e.age += dt;
+                const pos = e.mesh.geometry.attributes.position.array;
+                for(let j=0; j<e.vel.length; j+=3) {
+                    pos[j] += e.vel[j]*dt; pos[j+1] += e.vel[j+1]*dt; pos[j+2] += e.vel[j+2]*dt;
+                }
+                e.mesh.geometry.attributes.position.needsUpdate = true;
+                if(e.age > 0.6) { scene.remove(e.mesh); explosions.splice(i, 1); }
+            }
+        }
+
+        function flashRed(ob) {
+            const mat = ob.material || ob.children[0].material;
+            const oldColor = mat.emissive.getHex();
+            mat.emissive.setHex(0xff0000);
+            setTimeout(() => { if(mat) mat.emissive.setHex(oldColor); }, 80);
+        }
+
+        function takeDamage() {
+            health -= 25;
+            const overlay = document.getElementById('damage-overlay');
+            overlay.style.boxShadow = "inset 0 0 100px rgba(255,0,0,0.8)";
+            document.body.classList.add('shake');
+            setTimeout(() => { overlay.style.boxShadow = "none"; document.body.classList.remove('shake'); }, 300);
+            if (health <= 0) gameOver();
+        }
+
+        function updateHUD() {
+            document.getElementById('score').innerText = Math.floor(score);
+            document.getElementById('shield-fill').style.width = Math.max(0, health) + "%";
+            document.getElementById('shield-fill').style.background = health > 30 ? "#00ff41" : "#ff0000";
+            document.getElementById('speed-val').innerText = Math.floor(speed * 3);
+            const t = clock.getElapsedTime() - timeStart;
+            document.getElementById('time').innerText = `${Math.floor(t/60).toString().padStart(2,'0')}:${Math.floor(t%60).toString().padStart(2,'0')}`;
+        }
+
+        function gameOver() {
+            gameActive = false;
+            document.querySelector('#start-screen h1').innerText = "SYSTEM FAILURE";
+            document.querySelector('#start-screen button').innerText = "RELOAD";
+            document.querySelector('#start-screen button').onclick = () => location.reload();
+            document.getElementById('start-screen').style.display = 'flex';
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        function handleKeyDown(e) {
+            if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+            if(e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+            if(e.key === 'Shift') keys.boost = true;
+            if(e.key === ' ') keys.fire = true;
+        }
+        function handleKeyUp(e) {
+            if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+            if(e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+            if(e.key === 'Shift') keys.boost = false;
+            if(e.key === ' ') keys.fire = false;
+        }
+
+    </script>
+</body>
+</html>
