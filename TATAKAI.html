@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TATAKAI: CUSTOMIZABLE FIGHTING GAME</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Russo+One&family=Teko:wght@300;700&display=swap');
+
+        :root {
+            --p1-main: #00e5ff;
+            --p2-main: #ff0055;
+            --ui-bg: rgba(10, 10, 15, 0.95);
+            --skew: -10deg;
+        }
+
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Teko', sans-serif; color: white; user-select: none; }
+        #game-canvas { position: fixed; top: 0; left: 0; z-index: 0; }
+        
+        /* UPDATED YOUTUBE CONTAINER (Moved off-screen instead of hidden) */
+        #yt-container { 
+            position: fixed; top: 0; left: -9999px; width: 640px; height: 360px; z-index: 0; 
+            pointer-events: none; visibility: hidden;
+        }
+
+        /* GLOBAL SCREENS */
+        .screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; z-index: 10;
+        }
+        .screen.active { display: flex; animation: fadeIn 0.5s forwards; }
+
+        /* LOADING */
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 300;
+            display: none; color: white; font-size: 2rem; align-items: center; justify-content: center; font-family: 'Black Ops One';
+        }
+
+        /* MENU SCREEN */
+        #screen-menu {
+            flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(circle, rgba(0,0,0,0.8) 0%, #000 90%);
+        }
+        
+        .title-logo {
+            font-family: 'Black Ops One'; font-size: 8rem;
+            background: linear-gradient(to bottom, #fff, #888); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 5px 5px 0px var(--p2-main); transform: skewX(var(--skew)); margin-bottom: 20px;
+            text-align: center; line-height: 1;
+        }
+
+        .menu-btn {
+            font-family: 'Russo One'; font-size: 2rem; background: transparent; color: white; border: 2px solid white;
+            padding: 15px 60px; margin: 10px; transform: skewX(var(--skew)); cursor: pointer; transition: 0.2s;
+        }
+        .menu-btn:hover { background: white; color: black; box-shadow: 0 0 20px white; }
+
+        /* EDITOR SIDEBAR */
+        .editor-screen { justify-content: flex-start; pointer-events: none; }
+        
+        .sidebar {
+            pointer-events: auto;
+            width: 360px; height: 100%; background: var(--ui-bg); border-right: 2px solid #333;
+            display: flex; flex-direction: column; padding: 20px; box-sizing: border-box;
+            box-shadow: 5px 0 20px rgba(0,0,0,0.5);
+            overflow-y: auto;
+            scrollbar-width: thin; scrollbar-color: #555 #111;
+        }
+        .sidebar-right { position: absolute; right: 0; border-right: none; border-left: 2px solid #333; }
+
+        .header { font-family: 'Russo One'; font-size: 2rem; margin-bottom: 20px; border-bottom: 2px solid white; }
+        
+        .input-group { margin-bottom: 12px; }
+        .input-group label { display: flex; justify-content: space-between; color: #aaa; font-size: 1rem; margin-bottom: 2px; }
+        
+        input[type="text"] { 
+            width: 100%; background: #222; border: 1px solid #444; color: white; padding: 5px; 
+            font-family: 'Teko'; font-size: 1.2rem; box-sizing: border-box; 
+        }
+        
+        input[type="range"] { width: 100%; cursor: pointer; }
+        
+        .file-btn {
+            background: #333; color: white; border: 1px dashed #666; width: 100%; padding: 8px;
+            cursor: pointer; text-align: center; font-size: 1.1rem; transition: 0.2s; box-sizing: border-box;
+        }
+        .file-btn:hover { background: #444; border-color: white; }
+
+        .music-toggle-row { display: flex; gap: 5px; margin-bottom: 5px; }
+        .music-toggle-btn { flex: 1; background: #222; border: 1px solid #444; color: #666; cursor: pointer; padding: 2px; font-weight: bold; }
+        .music-toggle-btn.active { background: white; color: black; border-color: white; }
+
+        .nav-btn {
+            background: white; color: black; border: none; font-weight: bold; padding: 15px; 
+            font-size: 1.5rem; cursor: pointer; margin-top: auto; width: 100%; font-family: 'Russo One';
+        }
+        .nav-btn:hover { background: #ddd; }
+
+        .preset-row { display: flex; gap: 5px; margin-top: 10px; margin-bottom: 20px; }
+        .preset-btn { flex: 1; background: #222; color: #aaa; border: 1px solid #444; padding: 5px; cursor: pointer; }
+        .preset-btn:hover { color: white; border-color: white; }
+
+        #preset-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 200;
+            display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto;
+        }
+        .preset-list { width: 400px; max-height: 60%; overflow-y: auto; background: #111; border: 2px solid white; padding: 10px; }
+        .preset-item { display: flex; justify-content: space-between; background: #222; margin-bottom: 5px; padding: 10px; align-items: center; }
+        .preset-actions button { margin-left: 5px; cursor: pointer; padding: 2px 8px; font-weight: bold; border:none; }
+        .btn-load { background: #00ff00; } .btn-del { background: #ff0000; color: white; }
+
+        #screen-hud { pointer-events: none; justify-content: space-between; padding: 20px; display: none; }
+        .hud-top { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+        .hud-name { font-size: 2rem; font-family: 'Russo One'; text-transform: uppercase; margin-bottom: 5px; line-height: 1; }
+        .hp-bar-bg { width: 100%; height: 30px; background: #333; transform: skewX(var(--skew)); border: 2px solid white; }
+        .hp-fill { height: 100%; width: 100%; transition: width 0.2s; }
+        .p1-hp { background: var(--p1-main); } .p2-hp { background: var(--p2-main); }
+
+        .hud-bottom { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 20px; pointer-events: auto; }
+        .atk-btn {
+            width: 120px; height: 120px; background: rgba(0,0,0,0.8); border: 2px solid #555; color: white; transform: skewX(var(--skew));
+            display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: 0.1s;
+        }
+        .atk-btn:hover { background: #333; border-color: white; transform: scale(1.05) skewX(var(--skew)); }
+        .atk-btn.disabled { opacity: 0.4; filter: grayscale(1); cursor: not-allowed; }
+        
+        #screen-pause { background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); z-index: 100; align-items: center; justify-content: center; }
+        .pause-box { display: flex; gap: 20px; }
+        .gd-btn {
+            width: 100px; height: 100px; cursor: pointer; transition: 0.2s; margin: 10px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border: 3px solid white; border-radius: 10px; background: #444;
+            font-family: 'Russo One'; font-size: 1rem;
+        }
+        .gd-btn:hover { background: white; color: black; }
+
+        #win-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); z-index: 100; display: none; align-items: center; justify-content: center; flex-direction: column; }
+        #win-msg { font-size: 5rem; font-family: 'Black Ops One'; color: gold; margin-bottom:20px; text-transform: uppercase; text-align: center; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes shake { 0% { transform: translate(0,0); } 25% { transform: translate(5px,0); } 75% { transform: translate(-5px,0); } 100% { transform: translate(0,0); } }
+        .shake { animation: shake 0.2s; }
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="game-canvas"></div>
+    <div id="yt-container"></div>
+    <div id="loading-overlay">SAVING / LOADING...</div>
+
+    <div id="screen-menu" class="screen active">
+        <div class="title-logo">TATAKAI</div>
+        <button class="menu-btn" onclick="startFlow('1p')">ARCADE (1P)</button>
+        <button class="menu-btn" onclick="startFlow('2p')">VERSUS (2P)</button>
+    </div>
+
+    <div id="screen-p1" class="screen editor-screen">
+        <div class="sidebar" style="border-top: 5px solid var(--p1-main);">
+            <div class="header" style="color:var(--p1-main)">PLAYER 1 SETUP</div>
+            <div class="input-group">
+                <label>Name</label><input type="text" id="p1-name" value="HERO">
+            </div>
+            <div class="input-group">
+                <label>3D Model</label>
+                <div class="file-btn" onclick="document.getElementById('p1-input').click()">📂 Upload File</div>
+                <input type="file" id="p1-input" style="display:none" accept=".glb,.gltf,.stl,.obj,.png,.jpg">
+                <div id="p1-status" style="font-size:0.8rem; margin-top:5px; color:#666;">No File Selected</div>
+            </div>
+            <div class="input-group"><label>Color Tint</label><input type="color" id="p1-color" value="#00e5ff" style="width:100%; height:30px; border:none;"></div>
+            <div class="input-group"><label>Scale (Size)</label><input type="range" id="p1-scale" min="0.5" max="3" step="0.1" value="1"></div>
+            <div class="input-group"><label>Position Y (Height)</label><input type="range" id="p1-posY" min="-3" max="3" step="0.1" value="0"></div>
+            <div class="input-group"><label>Rotation X</label><input type="range" id="p1-rotX" min="-3.14" max="3.14" step="0.1" value="0"></div>
+            <div class="input-group"><label>Rotation Y</label><input type="range" id="p1-rotY" min="-3.14" max="3.14" step="0.1" value="1.57"></div>
+            <div class="input-group"><label>Rotation Z</label><input type="range" id="p1-rotZ" min="-3.14" max="3.14" step="0.1" value="0"></div>
+            <div class="input-group">
+                <label>Attacks</label>
+                <input type="text" id="p1-n1" value="Jab" placeholder="Atk 1">
+                <input type="text" id="p1-n2" value="Kick" placeholder="Atk 2" style="margin-top:5px">
+                <input type="text" id="p1-n3" value="Smash" placeholder="Atk 3" style="margin-top:5px">
+            </div>
+            <div class="preset-row">
+                <button class="preset-btn" onclick="savePreset('p1', 'character')">SAVE PRESET</button>
+                <button class="preset-btn" onclick="openLoadMenu('p1', 'character')">LOAD PRESET</button>
+            </div>
+            <button class="nav-btn" onclick="goToP2()">NEXT PLAYER &rarr;</button>
+        </div>
+    </div>
+
+    <div id="screen-p2" class="screen editor-screen" style="justify-content: flex-end;">
+        <div class="sidebar sidebar-right" style="border-top: 5px solid var(--p2-main);">
+            <div class="header" style="color:var(--p2-main)">PLAYER 2 SETUP</div>
+            <div class="input-group">
+                <label>Name</label><input type="text" id="p2-name" value="RIVAL">
+            </div>
+            <div class="input-group">
+                <label>3D Model</label>
+                <div class="file-btn" onclick="document.getElementById('p2-input').click()">📂 Upload File</div>
+                <input type="file" id="p2-input" style="display:none" accept=".glb,.gltf,.stl,.obj,.png,.jpg">
+                <div id="p2-status" style="font-size:0.8rem; margin-top:5px; color:#666;">No File Selected</div>
+            </div>
+            <div class="input-group"><label>Color Tint</label><input type="color" id="p2-color" value="#ff0055" style="width:100%; height:30px; border:none;"></div>
+            <div class="input-group"><label>Scale (Size)</label><input type="range" id="p2-scale" min="0.5" max="3" step="0.1" value="1"></div>
+            <div class="input-group"><label>Position Y (Height)</label><input type="range" id="p2-posY" min="-3" max="3" step="0.1" value="0"></div>
+            <div class="input-group"><label>Rotation X</label><input type="range" id="p2-rotX" min="-3.14" max="3.14" step="0.1" value="0"></div>
+            <div class="input-group"><label>Rotation Y</label><input type="range" id="p2-rotY" min="-3.14" max="3.14" step="0.1" value="-1.57"></div>
+            <div class="input-group"><label>Rotation Z</label><input type="range" id="p2-rotZ" min="-3.14" max="3.14" step="0.1" value="0"></div>
+            <div class="input-group">
+                <label>Attacks</label>
+                <input type="text" id="p2-n1" value="Punch" placeholder="Atk 1">
+                <input type="text" id="p2-n2" value="Strike" placeholder="Atk 2" style="margin-top:5px">
+                <input type="text" id="p2-n3" value="Blast" placeholder="Atk 3" style="margin-top:5px">
+            </div>
+            <div class="preset-row">
+                <button class="preset-btn" onclick="savePreset('p2', 'character')">SAVE PRESET</button>
+                <button class="preset-btn" onclick="openLoadMenu('p2', 'character')">LOAD PRESET</button>
+            </div>
+            <button class="nav-btn" onclick="goToStage()">NEXT STAGE &rarr;</button>
+        </div>
+    </div>
+
+    <div id="screen-stage" class="screen editor-screen">
+        <div class="sidebar" style="border-top: 5px solid gold;">
+            <div class="header" style="color:gold">STAGE SETUP</div>
+            
+            <div class="input-group">
+                <label>Background Color</label>
+                <input type="color" id="env-bg-col" value="#111118" style="width:100%; height:40px; border:none;">
+            </div>
+
+            <div class="input-group">
+                <label>Background Image</label>
+                <div class="file-btn" onclick="document.getElementById('env-bg-img').click()">📂 Upload BG</div>
+                <input type="file" id="env-bg-img" style="display:none" accept="image/*">
+            </div>
+
+            <div class="input-group">
+                <label>Ground Texture</label>
+                <div class="file-btn" onclick="document.getElementById('env-tex').click()">📂 Upload Ground</div>
+                <input type="file" id="env-tex" style="display:none" accept="image/*">
+            </div>
+
+            <div class="input-group">
+                <label>Background Music</label>
+                
+                <div class="music-toggle-row">
+                    <button id="mt-file" class="music-toggle-btn active" onclick="setMusicMode('file')">FILE</button>
+                    <button id="mt-yt" class="music-toggle-btn" onclick="setMusicMode('yt')">YOUTUBE</button>
+                </div>
+
+                <div id="music-ui-file">
+                    <div class="file-btn" onclick="document.getElementById('env-music').click()">🎵 Upload MP3</div>
+                    <input type="file" id="env-music" style="display:none" accept="audio/*">
+                </div>
+
+                <div id="music-ui-yt" style="display:none;">
+                    <input type="text" id="env-yt-url" placeholder="Paste YouTube Link (Watch/Shorts)" oninput="handleYouTube(this.value)">
+                </div>
+
+                <div id="music-status" style="font-size:0.8rem; margin-top:5px; color:#666;">Mode: File | None</div>
+            </div>
+
+            <div class="input-group">
+                <label>Grid Visible?</label>
+                <input type="checkbox" id="env-grid" checked style="width:20px; height:20px;">
+            </div>
+
+            <div class="preset-row">
+                <button class="preset-btn" onclick="savePreset('stage', 'stage')">SAVE SETUP</button>
+                <button class="preset-btn" onclick="openLoadMenu('stage', 'stage')">LOAD SETUP</button>
+            </div>
+
+            <button class="nav-btn" style="margin-top:auto; background:gold;" onclick="startGame()">FIGHT!</button>
+        </div>
+    </div>
+
+    <div id="preset-overlay">
+        <div style="font-size:2rem; font-family:'Russo One'; margin-bottom:10px;">LOAD PRESET</div>
+        <div class="preset-list" id="preset-container"></div>
+        <button class="nav-btn" style="margin-top:20px; width:auto; padding:10px 40px;" onclick="document.getElementById('preset-overlay').style.display='none'">CANCEL</button>
+    </div>
+
+    <div id="screen-hud" class="screen">
+        <div style="position:fixed; top:20px; right:20px; font-size:2rem; cursor:pointer; border:2px solid white; width:40px; text-align:center; pointer-events:auto;" onclick="togglePause()">||</div>
+        <div class="hud-top">
+            <div style="width:45%">
+                <div class="hud-name" style="color:var(--p1-main)" id="hud-name-p1">P1</div>
+                <div class="hp-bar-bg"><div class="hp-fill p1-hp" id="hp-p1"></div></div>
+            </div>
+            <div style="width:45%; text-align:right;">
+                <div class="hud-name" style="color:var(--p2-main)" id="hud-name-p2">P2</div>
+                <div class="hp-bar-bg"><div class="hp-fill p2-hp" id="hp-p2"></div></div>
+            </div>
+        </div>
+        <div class="hud-bottom">
+            <div class="atk-btn" id="btn-0" onclick="performAttack(0)">
+                <div style="font-size:3rem; font-family:'Black Ops One'">1</div><div id="lbl-0" style="font-size:0.8rem">ATK</div>
+            </div>
+            <div class="atk-btn" id="btn-1" onclick="performAttack(1)">
+                <div style="font-size:3rem; font-family:'Black Ops One'">2</div><div id="lbl-1" style="font-size:0.8rem">ATK</div>
+            </div>
+            <div class="atk-btn" id="btn-2" onclick="performAttack(2)">
+                <div style="font-size:3rem; font-family:'Black Ops One'">3</div><div id="lbl-2" style="font-size:0.8rem">ATK</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-pause" class="screen">
+        <div class="pause-box">
+            <div class="gd-btn" onclick="togglePause()">RESUME</div>
+            <div class="gd-btn" onclick="restartMatch()">RESTART</div>
+            <div class="gd-btn" onclick="location.reload()" style="background:#a00; color:white;">QUIT</div>
+        </div>
+    </div>
+
+    <div id="win-overlay">
+        <div id="win-msg">WINNER</div>
+        <button class="nav-btn" style="width:auto; padding:10px 40px;" onclick="restartMatch()">REMATCH</button>
+        <button class="nav-btn" style="width:auto; padding:10px 40px; margin-top:10px;" onclick="location.reload()">MENU</button>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+        // --- DATABASE ---
+        const DB_NAME = "TatakaiUltimateDB";
+        const STORE_NAME = "assets";
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = (e) => {
+                    if (!e.target.result.objectStoreNames.contains(STORE_NAME)) e.target.result.createObjectStore(STORE_NAME);
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+        async function saveToDB(key, file) {
+            const db = await openDB();
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            tx.objectStore(STORE_NAME).put(file, key);
+            return new Promise(r => tx.oncomplete = r);
+        }
+        async function loadFromDB(key) {
+            const db = await openDB();
+            return new Promise((resolve) => {
+                const req = db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(key);
+                req.onsuccess = () => resolve(req.result);
+            });
+        }
+        async function deleteFromDB(key) {
+            const db = await openDB();
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            tx.objectStore(STORE_NAME).delete(key);
+        }
+
+        // --- STATE & 3D ---
+        const state = {
+            mode: '1p', turn: 'p1', active: false, paused: false,
+            p1: { mesh: null, hp: 100, cd: [0,0,0], config: { name:"P1" }, modelFile: null },
+            p2: { mesh: null, hp: 100, cd: [0,0,0], config: { name:"P2" }, modelFile: null },
+            stage: { texFile: null, bgImage: null, musicMode: 'file', musicFile: null, musicObj: null, musicYtId: null }
+        };
+        window.state = state;
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111118);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 3, 8);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.getElementById('game-canvas').appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const dir = new THREE.DirectionalLight(0xffffff, 2);
+        dir.position.set(5, 10, 5);
+        scene.add(dir);
+
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.8 }));
+        ground.rotation.x = -Math.PI/2;
+        scene.add(ground);
+        const grid = new THREE.GridHelper(50, 50, 0x555555, 0x111111);
+        scene.add(grid);
+
+        // --- DUMMIES ---
+        function createDummy(color, x) {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial({color}));
+            const g = new THREE.Group();
+            g.add(m); m.position.y = 1; g.position.x = x;
+            return g;
+        }
+        state.p1.mesh = createDummy(0x00e5ff, -2);
+        state.p2.mesh = createDummy(0xff0055, 2);
+        scene.add(state.p1.mesh);
+        scene.add(state.p2.mesh);
+
+        // --- NAVIGATION ---
+        window.startFlow = (mode) => {
+            state.mode = mode;
+            if(mode === '1p') document.getElementById('p2-name').value = "CPU";
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('screen-p1').classList.add('active');
+            moveCameraTo('p1');
+        };
+
+        window.goToP2 = () => {
+            state.p1.config.name = document.getElementById('p1-name').value;
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('screen-p2').classList.add('active');
+            moveCameraTo('p2');
+        };
+
+        window.goToStage = () => {
+            state.p2.config.name = document.getElementById('p2-name').value;
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('screen-stage').classList.add('active');
+            moveCameraTo('stage');
+        };
+
+        window.startGame = () => {
+            state.p1.config.attacks = [1,2,3].map(i => document.getElementById('p1-n'+i).value);
+            state.p2.config.attacks = [1,2,3].map(i => document.getElementById('p2-n'+i).value);
+
+            state.p1.mesh.position.set(-2, parseFloat(document.getElementById('p1-posY').value), 0);
+            state.p2.mesh.position.set(2, parseFloat(document.getElementById('p2-posY').value), 0);
+            
+            updateVisuals('p1'); updateVisuals('p2');
+
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('screen-hud').style.display = 'flex';
+            
+            document.getElementById('hud-name-p1').innerText = state.p1.config.name;
+            document.getElementById('hud-name-p2').innerText = state.p2.config.name;
+
+            state.p1.hp = 100; state.p2.hp = 100;
+            state.p1.cd = [0,0,0]; state.p2.cd = [0,0,0];
+            state.turn = 'p1'; state.active = true; state.paused = false;
+
+            playBattleMusic();
+            moveCameraTo('battle');
+            updateHUD();
+        };
+
+        // --- CAMERA ---
+        function moveCameraTo(target) {
+            let pos, look;
+            if(target === 'p1') { pos = new THREE.Vector3(-2, 2, 4); look = new THREE.Vector3(-2, 1, 0); }
+            else if (target === 'p2') { pos = new THREE.Vector3(2, 2, 4); look = new THREE.Vector3(2, 1, 0); }
+            else if (target === 'stage') { pos = new THREE.Vector3(0, 5, 8); look = new THREE.Vector3(0, 0, 0); }
+            else { pos = new THREE.Vector3(0, 4, 10); look = new THREE.Vector3(0, 1, 0); }
+            camera.position.copy(pos); camera.lookAt(look);
+        }
+
+        // --- LIVE EDITING ---
+        function updateVisuals(pid) {
+            const scale = parseFloat(document.getElementById(pid+'-scale').value);
+            const color = document.getElementById(pid+'-color').value;
+            const posY = parseFloat(document.getElementById(pid+'-posY').value);
+            const rotX = parseFloat(document.getElementById(pid+'-rotX').value);
+            const rotY = parseFloat(document.getElementById(pid+'-rotY').value);
+            const rotZ = parseFloat(document.getElementById(pid+'-rotZ').value);
+
+            const obj = (pid === 'p1') ? state.p1.mesh : state.p2.mesh;
+            if(obj) {
+                obj.scale.setScalar(scale); obj.position.y = posY;
+                obj.rotation.order = 'YXZ'; obj.rotation.set(rotX, rotY, rotZ);
+                obj.traverse(c => { if(c.isMesh && !c.material.map) c.material.color.set(color); });
+            }
+        }
+        ['p1','p2'].forEach(id => {
+            ['scale', 'color', 'posY', 'rotX', 'rotY', 'rotZ'].forEach(p => {
+                document.getElementById(`${id}-${p}`).addEventListener('input', () => updateVisuals(id));
+            });
+        });
+        document.getElementById('env-bg-col').addEventListener('input', (e) => {
+            scene.background = new THREE.Color(e.target.value); state.stage.bgImage = null; 
+        });
+        document.getElementById('env-grid').addEventListener('change', (e) => grid.visible = e.target.checked);
+
+        // --- MUSIC LOGIC (IMPROVED) ---
+        window.setMusicMode = (mode) => {
+            state.stage.musicMode = mode;
+            document.getElementById('mt-file').classList.toggle('active', mode==='file');
+            document.getElementById('mt-yt').classList.toggle('active', mode==='yt');
+            document.getElementById('music-ui-file').style.display = mode==='file' ? 'block' : 'none';
+            document.getElementById('music-ui-yt').style.display = mode==='yt' ? 'block' : 'none';
+            updateMusicStatus();
+        };
+
+        window.handleYouTube = (val) => {
+            // Updated Regex to handle standard, shorts, and mobile links
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+            const match = val.match(regExp);
+            if (match && match[2].length === 11) {
+                state.stage.musicYtId = match[2];
+            } else {
+                state.stage.musicYtId = null;
+            }
+            updateMusicStatus();
+        };
+
+        function updateMusicStatus() {
+            const el = document.getElementById('music-status');
+            if(state.stage.musicMode === 'file') el.innerText = state.stage.musicFile ? "File Loaded" : "No File";
+            else el.innerText = state.stage.musicYtId ? "Ready: " + state.stage.musicYtId : "Invalid URL";
+        }
+
+        function playBattleMusic() {
+            if(state.stage.musicObj) { state.stage.musicObj.pause(); state.stage.musicObj = null; }
+            const container = document.getElementById('yt-container');
+            container.innerHTML = '';
+            container.style.visibility = 'hidden';
+
+            if(state.stage.musicMode === 'file' && state.stage.musicFile) {
+                const a = new Audio(URL.createObjectURL(state.stage.musicFile)); 
+                a.loop=true; a.play();
+                state.stage.musicObj=a;
+            } 
+            else if(state.stage.musicMode === 'yt' && state.stage.musicYtId) {
+                // Improved Embed URL with more permissive parameters
+                container.style.visibility = 'visible'; // Needed so browser doesn't throttle
+                const url = `https://www.youtube.com/embed/${state.stage.musicYtId}?autoplay=1&loop=1&playlist=${state.stage.musicYtId}&controls=0&mute=0&start=0`;
+                container.innerHTML = `<iframe width="640" height="360" src="${url}" title="YT" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+            }
+        }
+
+        // --- SAVE/LOAD SYSTEM ---
+        function getPresets() { return JSON.parse(localStorage.getItem('tatakai_presets_ultimate_v2') || '[]'); }
+        
+        window.savePreset = async (srcId, type) => {
+            const name = prompt("Preset Name:"); if(!name) return;
+            document.getElementById('loading-overlay').style.display = 'flex';
+            const pid = Date.now();
+            try {
+                let data = {};
+                if(type === 'character') {
+                    const pObj = (srcId === 'p1') ? state.p1 : state.p2;
+                    data = {
+                        name: document.getElementById(srcId+'-name').value,
+                        scale: document.getElementById(srcId+'-scale').value,
+                        color: document.getElementById(srcId+'-color').value,
+                        posY: document.getElementById(srcId+'-posY').value,
+                        rotX: document.getElementById(srcId+'-rotX').value,
+                        rotY: document.getElementById(srcId+'-rotY').value,
+                        rotZ: document.getElementById(srcId+'-rotZ').value,
+                        attacks: [document.getElementById(srcId+'-n1').value, document.getElementById(srcId+'-n2').value, document.getElementById(srcId+'-n3').value],
+                        hasModel: !!pObj.modelFile
+                    };
+                    if(pObj.modelFile) await saveToDB(`p_${pid}_model`, pObj.modelFile);
+                } else {
+                    data = {
+                        bg: document.getElementById('env-bg-col').value,
+                        grid: document.getElementById('env-grid').checked,
+                        musicMode: state.stage.musicMode,
+                        ytId: state.stage.musicYtId,
+                        hasTex: !!state.stage.texFile,
+                        hasBgImg: !!state.stage.bgImage,
+                        hasMusicFile: (state.stage.musicMode === 'file' && !!state.stage.musicFile)
+                    };
+                    if(state.stage.texFile) await saveToDB(`p_${pid}_tex`, state.stage.texFile);
+                    if(state.stage.bgImage) await saveToDB(`p_${pid}_bg`, state.stage.bgImage);
+                    if(data.hasMusicFile) await saveToDB(`p_${pid}_music`, state.stage.musicFile);
+                }
+                const list = getPresets();
+                list.push({id:pid, name:name, type:type, data:data});
+                localStorage.setItem('tatakai_presets_ultimate_v2', JSON.stringify(list));
+                alert("Saved!");
+            } catch(e) { console.error(e); alert("Error saving."); }
+            document.getElementById('loading-overlay').style.display = 'none';
+        };
+
+        let currentLoadTarget = '';
+        window.openLoadMenu = (target, type) => {
+            currentLoadTarget = target;
+            const c = document.getElementById('preset-container'); c.innerHTML = '';
+            getPresets().filter(p=>p.type===type).forEach(p => {
+                const d = document.createElement('div'); d.className='preset-item';
+                d.innerHTML = `<span>${p.name}</span><div class="preset-actions"><button class="btn-load" id="l-${p.id}">LOAD</button><button class="btn-del" id="d-${p.id}">DEL</button></div>`;
+                c.appendChild(d);
+                d.querySelector(`#l-${p.id}`).onclick = () => loadPreset(p.id);
+                d.querySelector(`#d-${p.id}`).onclick = () => deletePreset(p.id);
+            });
+            document.getElementById('preset-overlay').style.display = 'flex';
+        };
+
+        window.loadPreset = async (id) => {
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('preset-overlay').style.display = 'none';
+            const p = getPresets().find(x=>x.id===id);
+            if(!p) return;
+
+            if(p.type === 'character') {
+                const t = currentLoadTarget; const pObj = (t==='p1')?state.p1:state.p2;
+                document.getElementById(t+'-name').value = p.data.name;
+                document.getElementById(t+'-scale').value = p.data.scale;
+                document.getElementById(t+'-color').value = p.data.color;
+                document.getElementById(t+'-posY').value = p.data.posY || 0;
+                document.getElementById(t+'-rotX').value = p.data.rotX || 0;
+                document.getElementById(t+'-rotY').value = p.data.rotY || (t==='p1'?1.57:-1.57);
+                document.getElementById(t+'-rotZ').value = p.data.rotZ || 0;
+                document.getElementById(t+'-n1').value = p.data.attacks[0];
+                document.getElementById(t+'-n2').value = p.data.attacks[1];
+                document.getElementById(t+'-n3').value = p.data.attacks[2];
+                if(p.data.hasModel) { const blob = await loadFromDB(`p_${id}_model`); if(blob) handleFile(blob, pObj, t); }
+                updateVisuals(t); 
+            } else {
+                document.getElementById('env-bg-col').value = p.data.bg;
+                document.getElementById('env-grid').checked = p.data.grid; grid.visible = p.data.grid;
+                if(p.data.hasBgImg) { const blob = await loadFromDB(`p_${id}_bg`); if(blob) handleBgImage(blob); }
+                else scene.background = new THREE.Color(p.data.bg);
+                if(p.data.hasTex) { const blob = await loadFromDB(`p_${id}_tex`); if(blob) handleTexture(blob); }
+                
+                const mode = p.data.musicMode || 'file'; setMusicMode(mode);
+                if(mode === 'yt') { document.getElementById('env-yt-url').value = p.data.ytId||''; state.stage.musicYtId = p.data.ytId; }
+                else if(p.data.hasMusicFile) { const blob = await loadFromDB(`p_${id}_music`); if(blob) handleMusicFile(blob); }
+                updateMusicStatus();
+            }
+            document.getElementById('loading-overlay').style.display = 'none';
+        };
+
+        window.deletePreset = async (id) => {
+            if(!confirm("Delete?")) return;
+            await deleteFromDB(`p_${id}_model`); await deleteFromDB(`p_${id}_tex`); await deleteFromDB(`p_${id}_bg`); await deleteFromDB(`p_${id}_music`);
+            const list = getPresets().filter(p=>p.id!==id);
+            localStorage.setItem('tatakai_presets_ultimate_v2', JSON.stringify(list));
+            document.getElementById('preset-overlay').style.display = 'none';
+        };
+
+        // --- FILE HANDLERS ---
+        const handleFile = (file, pObj, pid) => {
+            if(!file) return;
+            pObj.modelFile = file; const url = URL.createObjectURL(file); const ext = file.name.split('.').pop().toLowerCase();
+            if(pObj.mesh) scene.remove(pObj.mesh);
+            const onLoad = (obj, isSprite=false) => {
+                if(!isSprite) { const box = new THREE.Box3().setFromObject(obj); const size = box.getSize(new THREE.Vector3()); const scale = 2/Math.max(size.x,size.y,size.z); obj.scale.setScalar(scale); obj.position.y = (size.y*scale)/2; }
+                const grp = new THREE.Group(); grp.add(obj); grp.position.set((pid==='p1'?-2:2), 0, 0);
+                scene.add(grp); pObj.mesh = grp; if(isSprite) obj.userData.billboard=true;
+                document.getElementById(pid+'-status').innerText = "Loaded!"; updateVisuals(pid); 
+            };
+            if(['png','jpg'].includes(ext)) { new THREE.TextureLoader().load(url, t=>{ t.colorSpace=THREE.SRGBColorSpace; const r=t.image.width/t.image.height; const m=new THREE.Mesh(new THREE.PlaneGeometry(2*r,2),new THREE.MeshBasicMaterial({map:t,transparent:true,side:2})); m.position.y=1; onLoad(m,true); }); }
+            else if(ext==='glb'||ext==='gltf') { new GLTFLoader().load(url, g=>onLoad(g.scene)); }
+            else if(ext==='stl') { new STLLoader().load(url, g=>onLoad(new THREE.Mesh(g,new THREE.MeshStandardMaterial()))); }
+            else if(ext==='obj') { new OBJLoader().load(url, g=>onLoad(g)); }
+        };
+        const handleTexture = (f) => { state.stage.texFile = f; new THREE.TextureLoader().load(URL.createObjectURL(f), t=>{ t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=1000; t.repeat.set(10,10); ground.material.map=t; ground.material.needsUpdate=true; }); };
+        const handleBgImage = (f) => { state.stage.bgImage = f; new THREE.TextureLoader().load(URL.createObjectURL(f), t=>{ t.colorSpace=THREE.SRGBColorSpace; scene.background = t; }); };
+        const handleMusicFile = (f) => { state.stage.musicFile = f; updateMusicStatus(); };
+
+        document.getElementById('p1-input').onchange = function() { handleFile(this.files[0], state.p1, 'p1'); };
+        document.getElementById('p2-input').onchange = function() { handleFile(this.files[0], state.p2, 'p2'); };
+        document.getElementById('env-tex').onchange = function() { handleTexture(this.files[0]); };
+        document.getElementById('env-bg-img').onchange = function() { handleBgImage(this.files[0]); };
+        document.getElementById('env-music').onchange = function() { handleMusicFile(this.files[0]); };
+
+        // --- GAME LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            [state.p1.mesh, state.p2.mesh].forEach(g => { if(g) g.traverse(c=>{ if(c.userData.billboard) c.lookAt(camera.position); }); });
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // --- BATTLE ---
+        window.performAttack = (idx) => {
+            if(!state.active || state.paused) return;
+            if(state.mode==='1p' && state.turn==='p2') return;
+            const atk = state.turn==='p1'?state.p1:state.p2; const def = state.turn==='p1'?state.p2:state.p1;
+            if(atk.cd[idx]>0) return;
+            const mesh = atk.mesh; const startX = mesh.position.x; const dir = state.turn==='p1'?1:-1;
+            let f=0; const iv = setInterval(()=>{
+                if(state.paused) return;
+                f++;
+                if(f<5) mesh.position.x += dir*0.3;
+                else if(f===5) {
+                    def.hp -= (10+idx*10); document.body.classList.add('shake'); setTimeout(()=>document.body.classList.remove('shake'),200);
+                    updateHUD(); if(def.hp<=0) win();
+                } else if(f<10) mesh.position.x -= dir*0.3;
+                else { clearInterval(iv); mesh.position.x=startX; if(state.active){ if(idx>0)atk.cd[idx]=3+idx; nextTurn(); } }
+            },30);
+        };
+
+        function nextTurn() {
+            state.turn = state.turn==='p1'?'p2':'p1';
+            const p = state.turn==='p1'?state.p1:state.p2; p.cd = p.cd.map(c=>Math.max(0,c-1));
+            updateHUD(); if(state.turn==='p2' && state.mode==='1p') setTimeout(cpuMove, 1000);
+        }
+
+        function cpuMove() {
+            if(!state.active) return;
+            if(state.paused) { setTimeout(cpuMove,500); return; }
+            const moves = [0,1,2].filter(i=>state.p2.cd[i]===0); const m = moves[Math.floor(Math.random()*moves.length)]||0;
+            const mesh = state.p2.mesh; const startX = mesh.position.x;
+            let f=0; const iv = setInterval(()=>{
+                if(state.paused) return;
+                f++;
+                if(f<5) mesh.position.x -= 0.3;
+                else if(f===5) {
+                    state.p1.hp -= (10+m*10); document.body.classList.add('shake'); setTimeout(()=>document.body.classList.remove('shake'),200);
+                    updateHUD(); if(state.p1.hp<=0) win();
+                } else if(f<10) mesh.position.x += 0.3;
+                else { clearInterval(iv); mesh.position.x=startX; if(state.active) nextTurn(); }
+            },30);
+        }
+
+        function win() {
+            state.active = false; document.getElementById('win-overlay').style.display='flex';
+            document.getElementById('win-msg').innerText = (state.p1.hp>0?state.p1.config.name:state.p2.config.name)+" WINS!";
+        }
+        function updateHUD() {
+            document.getElementById('hp-p1').style.width = Math.max(0,state.p1.hp)+"%";
+            document.getElementById('hp-p2').style.width = Math.max(0,state.p2.hp)+"%";
+            const p = (state.mode==='1p'||state.turn==='p1')?state.p1:state.p2;
+            for(let i=0;i<3;i++) {
+                document.getElementById('lbl-'+i).innerText = p.config.attacks[i];
+                const btn = document.getElementById('btn-'+i);
+                if(p.cd[i]>0 || (state.mode==='1p'&&state.turn==='p2')) btn.classList.add('disabled'); else btn.classList.remove('disabled');
+            }
+        }
+        
+        window.togglePause = () => { if(state.active){ state.paused=!state.paused; document.getElementById('screen-pause').style.display=state.paused?'flex':'none'; } };
+        window.restartMatch = () => { document.getElementById('win-overlay').style.display='none'; document.getElementById('screen-pause').style.display='none'; document.getElementById('yt-container').innerHTML=''; startGame(); };
+        window.onresize=()=>{camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight);};
+    </script>
+</body>
+</html>

@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECHO GEOMETRY</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00ffaa;
+            --bg-top: #000;
+            --bg-bot: #000;
+        }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        #ui {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        
+        .top-bar {
+            width: 85%; margin-top: 30px; display: flex; justify-content: space-between; align-items: center;
+            text-shadow: 0 0 10px var(--primary); color: white; font-weight: bold; font-size: 18px;
+        }
+        
+        .progress-track {
+            flex-grow: 1; height: 6px; background: rgba(255,255,255,0.1); margin: 0 25px;
+            border-radius: 4px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; width: 0%; background: var(--primary);
+            box-shadow: 0 0 15px var(--primary); transition: width 0.1s linear;
+        }
+
+        .info-box {
+            background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.2);
+            min-width: 140px; text-align: center;
+        }
+
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; pointer-events: auto; z-index: 10;
+            transition: opacity 0.3s;
+        }
+        .screen.hidden { opacity: 0; pointer-events: none; }
+        
+        h1 {
+            font-size: 80px; margin: 0; text-transform: uppercase;
+            background: linear-gradient(to right, var(--primary), #fff);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 25px var(--primary)); letter-spacing: 5px;
+        }
+        
+        button {
+            margin-top: 50px; padding: 20px 60px; font-size: 24px; font-family: inherit; font-weight: 900;
+            color: #000; background: var(--primary); border: none; clip-path: polygon(15% 0, 100% 0, 85% 100%, 0% 100%);
+            cursor: pointer; transition: transform 0.1s, filter 0.1s;
+        }
+        button:hover { transform: scale(1.05); filter: drop-shadow(0 0 20px var(--primary)); }
+        
+        #death-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.4); pointer-events: none; opacity: 0;
+            display: flex; justify-content: center; align-items: center;
+            transition: opacity 0.1s;
+        }
+        #death-text {
+            font-size: 80px; color: white; text-shadow: 0 0 30px var(--primary);
+            font-weight: 900; transform: scale(0.5); transition: transform 0.2s;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="ui">
+    <div class="top-bar">
+        <div class="info-box">ATTEMPT <span id="att-count">1</span></div>
+        <div class="progress-track"><div class="progress-fill" id="p-bar"></div></div>
+        <div id="planet-box" class="info-box">SYSTEM: UNKNOWN</div>
+    </div>
+    <div class="top-bar" style="margin-top: 5px; font-size: 14px; opacity: 0.7;">
+        <div id="physics-info">INITIALIZING...</div>
+        <div id="percent-box">0%</div>
+    </div>
+</div>
+
+<div id="start-screen" class="screen">
+    <h1>ECHO GEOMETRY</h1>
+    <div style="color: #aaa; letter-spacing: 3px; margin-top: 10px;">GRAVITATIONAL JUMPING GAME</div>
+    <button onclick="startGame()">LAUNCH</button>
+</div>
+
+<div id="death-overlay">
+    <div id="death-text">CRASHED</div>
+</div>
+
+<script>
+// --- CONFIGURATION ---
+const C = {
+    BLOCK: 50,
+    BUFFER: 5,          
+    LENGTH: 35,
+    SPEED: 8.5
+};
+
+// --- THEME ENGINE ---
+const THEMES = {
+    LUNAR: {
+        name: "MOON BASE",
+        gravRange: [0.5, 0.75],
+        primary: '#00ffff', // Cyan
+        bgTop: '#000011',
+        bgBot: '#001133',
+        type: 'STARS'
+    },
+    TERRA: {
+        name: "CYBER CITY",
+        gravRange: [0.75, 1.05],
+        primary: '#00ff44', // Neon Green
+        bgTop: '#1a0033', // Deep Purple
+        bgBot: '#330066', // Lighter Purple
+        type: 'GRID'
+    },
+    SOLAR: {
+        name: "RED GIANT",
+        gravRange: [1.05, 1.4],
+        primary: '#ff3300', // Red/Orange
+        bgTop: '#220000',
+        bgBot: '#551100',
+        type: 'EMBERS'
+    }
+};
+
+let currentTheme = THEMES.TERRA;
+let GRAVITY = 0.85;
+let JUMP_FORCE = -15.5;
+
+// --- AUDIO ---
+const Audio = (window.AudioContext || window.webkitAudioContext) && new (window.AudioContext || window.webkitAudioContext)();
+function sfx(type) {
+    if (!Audio || Audio.state === 'suspended') Audio.resume();
+    const osc = Audio.createOscillator();
+    const gain = Audio.createGain();
+    osc.connect(gain);
+    gain.connect(Audio.destination);
+    const t = Audio.currentTime;
+
+    if (type === 'jump') {
+        osc.type = 'triangle'; 
+        let pitch = 200 + (GRAVITY*150);
+        osc.frequency.setValueAtTime(pitch, t);
+        osc.frequency.linearRampToValueAtTime(pitch*2, t + 0.1);
+        gain.gain.setValueAtTime(0.05, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.1);
+        osc.start(t); osc.stop(t + 0.1);
+    } else if (type === 'die') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, t);
+        osc.frequency.linearRampToValueAtTime(10, t + 0.4);
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.4);
+        osc.start(t); osc.stop(t + 0.4);
+    }
+}
+
+// --- GLOBAL VARIABLES ---
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+let state = 'MENU';
+let attempts = 1;
+
+let player = { x:0, y:0, dy:0, angle:0, grounded:false };
+let level = [];
+let particles = [];
+let bgParticles = []; // For stars/embers
+let camX = 0;
+let shake = 0;
+let totalLen = 0;
+let groundY = 0;
+
+// --- PATTERNS ---
+const CHUNKS = [
+    { map: [[0,0,0,0], [0,2,0,0]] }, 
+    { map: [[0,0,0,0,0,0], [0,2,2,2,0,0]] }, 
+    { map: [[0,0,0,0], [1,1,0,0]] },
+    { map: [[0,3,0,0,0], [1,2,2,2,1]] }, 
+    { map: [[0,0,2,0,0], [0,1,1,1,0]] },
+    { map: [[1,1,1,1,1], [0,0,0,0,0]] }, 
+    { map: [[0,0,0,1,1,0], [1,1,1,1,1,0]] },
+    { map: [[0,0,2,0,3,0], [0,0,0,0,0,0]] }
+];
+
+function randomizePhysics() {
+    // 1. Pick a Gravity value (0.6 to 1.35)
+    GRAVITY = 0.6 + (Math.random() * 0.75);
+    
+    // 2. Determine Theme based on Gravity
+    if (GRAVITY < 0.75) currentTheme = THEMES.LUNAR;
+    else if (GRAVITY < 1.05) currentTheme = THEMES.TERRA;
+    else currentTheme = THEMES.SOLAR;
+
+    // 3. Calc Jump
+    let jumpHeight = 130;
+    JUMP_FORCE = -Math.sqrt(2 * GRAVITY * jumpHeight);
+
+    // 4. Update UI & CSS Variables
+    document.documentElement.style.setProperty('--primary', currentTheme.primary);
+    document.getElementById('planet-box').innerText = "SYSTEM: " + currentTheme.name;
+    document.getElementById('physics-info').innerText = `G: ${GRAVITY.toFixed(2)}G`;
+
+    // 5. Init Background Particles
+    initBgParticles();
+}
+
+function initBgParticles() {
+    bgParticles = [];
+    if(currentTheme.type === 'STARS') {
+        for(let i=0; i<100; i++) {
+            bgParticles.push({
+                x: Math.random() * cvs.width,
+                y: Math.random() * cvs.height,
+                size: Math.random() * 2,
+                speed: 0.2 + Math.random() * 0.5
+            });
+        }
+    } else if (currentTheme.type === 'EMBERS') {
+        for(let i=0; i<50; i++) {
+            bgParticles.push({
+                x: Math.random() * cvs.width,
+                y: cvs.height + Math.random() * 500,
+                size: 2 + Math.random() * 4,
+                speed: 1 + Math.random() * 2
+            });
+        }
+    }
+}
+
+function buildLevel() {
+    level = []; 
+    let cx = 10;
+    groundY = cvs.height - 150;
+    cx += 5;
+
+    for(let i=0; i<C.LENGTH; i++) {
+        cx += C.BUFFER; 
+        const chunk = CHUNKS[Math.floor(Math.random() * CHUNKS.length)];
+        const width = chunk.map[0].length;
+        
+        for(let x=0; x<width; x++) {
+            let px = (cx + x) * C.BLOCK;
+            let itemB = chunk.map[1][x];
+            if(itemB === 1) addRect(px, groundY - C.BLOCK, C.BLOCK, C.BLOCK, 1);
+            if(itemB === 2) addSpike(px, groundY - C.BLOCK); 
+
+            let itemA = chunk.map[0][x];
+            let pyAir = groundY - (C.BLOCK * 2);
+            if(itemA === 1) addRect(px, pyAir, C.BLOCK, C.BLOCK, 1);
+            if(itemA === 2) addSpike(px, pyAir); 
+            if(itemA === 3) addOrb(px, pyAir);
+        }
+        cx += width;
+    }
+    addRect(cx * C.BLOCK, groundY - C.BLOCK * 5, 40, C.BLOCK * 5, 1);
+    return cx * C.BLOCK;
+}
+
+function addRect(x,y,w,h,t) { level.push({x,y,w,h,type:t}); } 
+function addSpike(x,y) { level.push({x,y,w:C.BLOCK,h:C.BLOCK,type:2}); } 
+function addOrb(x,y) { level.push({x,y,w:C.BLOCK,h:C.BLOCK,type:3, active:true}); } 
+
+// --- GAME LOGIC ---
+let input = { jump: false, holding: false };
+
+function startGame() {
+    document.getElementById('start-screen').classList.add('hidden');
+    reset();
+}
+
+function reset() {
+    resize();
+    randomizePhysics();
+    totalLen = buildLevel(); 
+    player = { x: 100, y: groundY - 50, dy: 0, angle: 0, grounded: true };
+    document.getElementById('death-overlay').style.opacity = '0';
+    document.getElementById('att-count').innerText = attempts;
+    particles = [];
+    state = 'PLAY';
+    input.jump = false; 
+    input.holding = false;
+}
+
+function update() {
+    if(state !== 'PLAY') return;
+    
+    if(input.holding && player.grounded) input.jump = true;
+
+    player.dy += GRAVITY;
+    player.y += player.dy;
+    player.x += C.SPEED;
+    
+    if(player.y > groundY - 50) {
+        player.y = groundY - 50;
+        player.dy = 0;
+        player.grounded = true;
+    }
+
+    let rotSpeed = 0.1 + (GRAVITY * 0.1);
+    if(player.grounded) {
+        let t = Math.round(player.angle / (Math.PI/2)) * (Math.PI/2);
+        player.angle += (t - player.angle) * 0.4;
+    } else {
+        player.angle += rotSpeed;
+    }
+
+    // UPDATE BG PARTICLES
+    if(currentTheme.type === 'EMBERS') {
+        for(let p of bgParticles) {
+            p.y -= p.speed;
+            p.x += Math.sin(Date.now()/1000 + p.y) * 0.5; // Waver
+            if(p.y < -10) p.y = cvs.height + 10;
+        }
+    }
+
+    const pRect = { l: player.x+10, r: player.x+40, t: player.y+10, b: player.y+40 }; 
+
+    for(let obj of level) {
+        if(obj.x < player.x - 100 || obj.x > player.x + 100) continue;
+        let oRect = { l: obj.x, r: obj.x+obj.w, t: obj.y, b: obj.y+obj.h };
+
+        if(rectIntersect(pRect, oRect)) {
+            if(obj.type === 2) { 
+                if(player.x+30 > obj.x+10 && player.x+20 < obj.x+obj.w-10 && player.y+40 > obj.y+20) die();
+            }
+            else if(obj.type === 3) { 
+                if(obj.active && (input.jump || input.holding)) {
+                    player.dy = JUMP_FORCE * 1.1; 
+                    obj.active = false; input.jump = false;
+                    spawnPart(obj.x+25, obj.y+25, '#fff', 10);
+                }
+            }
+            else if(obj.type === 1) { 
+                let prevY = player.y - player.dy;
+                if(prevY + 40 <= obj.y + 15 && player.dy >= 0) {
+                    player.y = obj.y - 50; player.dy = 0; player.grounded = true;
+                } else {
+                    die();
+                }
+            }
+        }
+    }
+
+    if(input.jump && player.grounded) {
+        player.dy = JUMP_FORCE; 
+        player.grounded = false; input.jump = false; sfx('jump');
+    }
+
+    camX = player.x - 300;
+    
+    let pct = Math.floor((player.x / totalLen) * 100);
+    document.getElementById('p-bar').style.width = Math.min(100, pct) + "%";
+    document.getElementById('percent-box').innerText = Math.min(100, pct) + "%";
+    
+    if (pct >= 100) { attempts++; reset(); } 
+    if(shake > 0) shake *= 0.9;
+}
+
+function die() {
+    state = 'DEAD';
+    shake = 20; 
+    sfx('die');
+    spawnPart(player.x, player.y, currentTheme.primary, 40);
+    document.getElementById('death-overlay').style.opacity = '1';
+    setTimeout(() => { attempts++; reset(); }, 800);
+}
+
+function rectIntersect(r1, r2) {
+    return !(r2.l > r1.r || r2.r < r1.l || r2.t > r1.b || r2.b < r1.t);
+}
+
+// --- RENDER ---
+function draw() {
+    // 1. Draw Dynamic Gradient Background
+    let grad = ctx.createLinearGradient(0, 0, 0, cvs.height);
+    grad.addColorStop(0, currentTheme.bgTop);
+    grad.addColorStop(1, currentTheme.bgBot);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,cvs.width,cvs.height);
+    
+    // 2. Draw Planetary Elements (Stars/Grid/Embers)
+    ctx.save();
+    if(currentTheme.type === 'STARS') {
+        ctx.fillStyle = '#ffffff';
+        for(let p of bgParticles) {
+            // Parallax Effect
+            let px = (p.x - camX * 0.1) % cvs.width; 
+            if(px < 0) px += cvs.width;
+            ctx.globalAlpha = Math.random() * 0.5 + 0.3;
+            ctx.fillRect(px, p.y, p.size, p.size);
+        }
+    } else if (currentTheme.type === 'GRID') {
+        // Draw Retro Grid
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        let pX = -(camX * 0.5) % 100;
+        // Verticals
+        for(let i=0; i<cvs.width+100; i+=100) {
+            ctx.beginPath(); ctx.moveTo(pX+i, 0); ctx.lineTo(pX+i, cvs.height); ctx.stroke();
+        }
+        // Horizontals (Perspective-ish)
+        for(let i=0; i<cvs.height; i+=80) {
+             ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(cvs.width, i); ctx.stroke();
+        }
+    } else if (currentTheme.type === 'EMBERS') {
+        ctx.fillStyle = '#ffaa00';
+        for(let p of bgParticles) {
+            let px = (p.x - camX * 0.2) % cvs.width;
+            if(px < 0) px += cvs.width;
+            ctx.globalAlpha = Math.random() * 0.6;
+            ctx.beginPath(); ctx.arc(px, p.y, p.size, 0, Math.PI*2); ctx.fill();
+        }
+    }
+    ctx.restore();
+
+
+    // 3. Camera Transform for Game Objects
+    let sx = (Math.random()-0.5)*shake;
+    let sy = (Math.random()-0.5)*shake;
+    ctx.save();
+    ctx.translate(-camX + sx, sy);
+
+    // Floor Line
+    ctx.beginPath();
+    ctx.moveTo(camX, groundY);
+    ctx.lineTo(camX + cvs.width, groundY);
+    ctx.strokeStyle = currentTheme.primary; ctx.lineWidth = 4; ctx.shadowBlur = 15; ctx.shadowColor = currentTheme.primary; 
+    ctx.stroke(); ctx.shadowBlur = 0;
+    
+    // Floor Fill (Darker version of primary)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(camX, groundY, cvs.width, cvs.height - groundY);
+
+    // Objects
+    for(let obj of level) {
+        if(obj.x < camX-100 || obj.x > camX+cvs.width+100) continue;
+        
+        // Block
+        if(obj.type === 1) { 
+            ctx.fillStyle = '#000'; ctx.strokeStyle = currentTheme.primary; ctx.lineWidth=2;
+            ctx.fillRect(obj.x, obj.y, obj.w, obj.h); ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+            
+            // Inner detail based on theme
+            ctx.fillStyle = currentTheme.primary; ctx.globalAlpha = 0.2;
+            ctx.fillRect(obj.x+10, obj.y+10, obj.w-20, obj.h-20); ctx.globalAlpha=1;
+        }
+        
+        // Spike
+        if(obj.type === 2) { 
+            ctx.fillStyle = '#000'; ctx.strokeStyle = currentTheme.primary; ctx.lineWidth=2;
+            ctx.beginPath(); 
+            ctx.moveTo(obj.x, obj.y + C.BLOCK); 
+            ctx.lineTo(obj.x + (C.BLOCK/2), obj.y); 
+            ctx.lineTo(obj.x + C.BLOCK, obj.y + C.BLOCK); 
+            ctx.fill(); ctx.stroke();
+            // Inner Danger Color
+            ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.5;
+            ctx.beginPath(); ctx.moveTo(obj.x+20, obj.y+50); ctx.lineTo(obj.x+25, obj.y+35); ctx.lineTo(obj.x+30, obj.y+50); ctx.fill(); ctx.globalAlpha=1;
+        }
+        
+        // Orb
+        if(obj.type === 3 && obj.active) { 
+            ctx.fillStyle = '#ffff00'; ctx.shadowBlur=15; ctx.shadowColor='#ffff00';
+            ctx.beginPath(); ctx.arc(obj.x+25, obj.y+25, 10, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur=0; ctx.strokeStyle='#fff'; ctx.beginPath(); ctx.arc(obj.x+25, obj.y+25, 16, 0, Math.PI*2); ctx.stroke();
+        }
+    }
+
+    // Player
+    if(state === 'PLAY') {
+        ctx.save(); ctx.translate(player.x+25, player.y+25); ctx.rotate(player.angle);
+        ctx.fillStyle = currentTheme.primary; ctx.shadowBlur=20; ctx.shadowColor=currentTheme.primary;
+        ctx.fillRect(-25,-25,50,50);
+        ctx.fillStyle = '#000'; ctx.shadowBlur=0; ctx.fillRect(-20,-20,40,40); 
+        ctx.fillStyle = '#fff'; ctx.fillRect(5,-10,10,10); 
+        ctx.restore();
+    }
+
+    // Particles
+    for(let i=particles.length-1; i>=0; i--) {
+        let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.03;
+        if(p.life <= 0) particles.splice(i,1);
+        else { 
+            ctx.fillStyle = p.c;
+            ctx.globalAlpha = p.life; ctx.fillRect(p.x, p.y, 5, 5); 
+        }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    requestAnimationFrame(() => { update(); draw(); });
+}
+
+function spawnPart(x,y,c,n) {
+    for(let i=0; i<n; i++) particles.push({x,y,vx:(Math.random()-0.5)*15, vy:(Math.random()-0.5)*15, life:1, c});
+}
+
+function resize() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; }
+window.onresize = resize;
+window.onkeydown = (e) => { if(e.code==='Space') { e.preventDefault(); input.jump=true; input.holding=true; } };
+window.onkeyup = (e) => { if(e.code==='Space') input.holding=false; };
+window.onmousedown = () => { input.jump=true; input.holding=true; };
+window.onmouseup = () => { input.holding=false; };
+window.ontouchstart = (e) => { e.preventDefault(); input.jump=true; input.holding=true; };
+window.ontouchend = (e) => { e.preventDefault(); input.holding=false; };
+
+// INIT
+resize();
+draw();
+</script>
+</body>
+</html>
