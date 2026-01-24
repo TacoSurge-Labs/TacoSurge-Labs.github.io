@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Drum Station</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        :root {
+            --bg: #111;
+            --case: #222;
+            --screen-bg: #4a5d75;
+            --phosphor: #a8e6cf; 
+            --accent: #ff8b94;
+            --gold: #f3d250;
+            --wood: #a0522d;
+            --drum-body: #d64161;
+            --skin: #f0f0f0;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: white;
+            margin: 0; height: 100vh;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            font-family: 'VT323', monospace;
+            overflow: hidden; touch-action: none; user-select: none;
+        }
+
+        /* --- CRT SCANLINE OVERLAY --- */
+        .crt::after {
+            content: " "; display: block; position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px; z-index: 10; pointer-events: none;
+        }
+
+        #ui-container {
+            width: 95%; max-width: 900px; height: 90vh;
+            display: flex; flex-direction: column; gap: 15px;
+            position: relative;
+        }
+
+        /* --- TOP DASHBOARD --- */
+        .dashboard {
+            background: var(--case); border: 4px solid #444;
+            padding: 10px; display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 5px 0 #000;
+        }
+
+        .lcd-panel {
+            background: var(--screen-bg); border: 4px inset #333;
+            padding: 5px; width: 300px; display: flex; flex-direction: column; gap: 5px;
+            position: relative;
+        }
+        
+        .lcd-row { display: flex; justify-content: space-between; align-items: center; }
+        
+        .lcd-text { color: var(--phosphor); font-size: 18px; text-shadow: 0 0 5px var(--phosphor); }
+        
+        input[type="range"] {
+            -webkit-appearance: none; background: transparent; width: 100px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 15px; width: 10px; background: var(--phosphor);
+            border: 1px solid #000; cursor: pointer; margin-top: -5px;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; background: #222; border: 1px solid var(--phosphor);
+        }
+
+        .mode-btn {
+            background: #555; color: #fff; border: 2px solid #000;
+            padding: 10px 20px; font-family: inherit; font-size: 20px; cursor: pointer;
+            box-shadow: 0 4px 0 #000;
+        }
+        .mode-btn:active { transform: translateY(4px); box-shadow: none; }
+        .mode-btn.active { background: var(--accent); color: #000; border-color: #fff; }
+
+        /* --- VIEWPORT --- */
+        .viewport {
+            flex-grow: 1; position: relative;
+            background: #2a2a2a; border: 4px solid #444;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        /* --- MODE 1: PAD GRID (4x4) --- */
+        #pad-view {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 10px; padding: 15px; width: 100%; max-width: 600px;
+        }
+
+        .pad {
+            aspect-ratio: 1.3/1; background: #999;
+            border-bottom: 6px solid #555; border-radius: 4px;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            cursor: pointer; position: relative;
+        }
+        .pad:active, .pad.active {
+            transform: translateY(6px); border-bottom: 0; background: #fff;
+            box-shadow: 0 0 15px white;
+        }
+        
+        /* Color Coding */
+        .pad[data-type="drum"] { background: #d64161; color: white; }
+        .pad[data-type="cym"] { background: #f3d250; color: black; }
+        .pad[data-type="aux"] { background: #888; color: white; }
+        .pad[data-type="timp"] { background: #d08856; color: black; }
+
+        .pad-lbl { font-size: 16px; font-weight: bold; pointer-events: none; }
+        .pad-key { font-size: 10px; opacity: 0.7; pointer-events: none; }
+
+        /* --- MODE 2: STAGE VIEW (Visual Kit) --- */
+        #stage-view {
+            display: none; width: 100%; height: 100%;
+            position: relative; overflow: hidden;
+            background: #181818;
+        }
+        
+        .floor {
+            position: absolute; bottom: 0; width: 100%; height: 40%;
+            background: linear-gradient(to bottom, #222, #111);
+            border-top: 2px solid #444; z-index: 0;
+        }
+
+        /* Pixel Instrument Classes */
+        .pix { 
+            position: absolute; cursor: pointer; 
+            border: 3px solid #000;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.5);
+            transition: transform 0.05s; z-index: 10;
+        }
+        .pix:active, .pix.active { transform: translateY(3px) scale(0.98); filter: brightness(1.3); }
+
+        .stand { position: absolute; background: silver; width: 6px; z-index: 5; border: 1px solid #000; }
+
+        /* -- DRUMS -- */
+        .p-kick {
+            width: 160px; height: 160px; bottom: 40px; left: 50%; transform: translateX(-50%);
+            background: var(--drum-body); border-radius: 50%; border: 6px solid #ccc;
+            background-image: radial-gradient(circle at 50% 50%, var(--skin) 30%, #ddd 60%, #333 95%);
+            z-index: 20;
+        }
+        .p-kick-logo {
+            position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 10px; color: #000; opacity: 0.5;
+        }
+
+        .p-snare {
+            width: 100px; height: 60px; bottom: 100px; left: 35%;
+            background: #fff; border: 3px solid #000; z-index: 25;
+            background-image: linear-gradient(to right, #ddd 10%, #fff 50%, #ddd 90%);
+        }
+        
+        .p-tom-h { width: 70px; height: 60px; background: var(--drum-body); top: 35%; left: 42%; z-index: 15; }
+        .p-tom-m { width: 80px; height: 70px; background: var(--drum-body); top: 35%; right: 42%; z-index: 15; }
+        .p-tom-f { width: 120px; height: 120px; background: var(--drum-body); bottom: 40px; right: 20%; z-index: 15; }
+
+        /* -- CYMBALS -- */
+        .p-cym { background: var(--gold); height: 8px; border-radius: 4px; z-index: 30; }
+        
+        .p-hat { width: 80px; bottom: 140px; left: 20%; background: #ccc; }
+        .p-crash { width: 100px; top: 25%; left: 25%; transform: rotate(-10deg); }
+        .p-splash { width: 60px; top: 40%; left: 32%; transform: rotate(-5deg); }
+        .p-ride { width: 130px; top: 20%; right: 25%; transform: rotate(10deg); }
+        .p-china { width: 110px; top: 15%; right: 15%; transform: rotate(15deg); border-bottom: 4px solid #b8860b; }
+
+        /* -- AUX & TIMPANI -- */
+        .timp-station {
+            position: absolute; bottom: 50px; left: 5%;
+            display: flex; gap: 10px; z-index: 10;
+        }
+        .p-timp {
+            width: 90px; height: 80px; background: #d08856; /* Copper */
+            border-radius: 0 0 45px 45px; border: 3px solid #000;
+            position: relative;
+        }
+        .p-timp::after {
+            content:''; position: absolute; top:0; left:0; right:0; height: 20px;
+            background: var(--skin); border-bottom: 3px solid #000;
+        }
+        
+        .p-cowbell { 
+            position: absolute; top: 30%; left: 50%; transform: translateX(-50%);
+            width: 30px; height: 40px; background: #333; z-index: 28;
+            clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+        }
+        .p-block {
+            position: absolute; top: 25%; left: 55%; width: 40px; height: 20px;
+            background: #d04648; z-index: 28; border: 2px solid #000;
+        }
+
+        /* --- OVERLAY --- */
+        #start-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.95);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100;
+        }
+        #start-btn {
+            background: var(--phosphor); color: #000; padding: 20px 40px;
+            font-size: 24px; font-family: inherit; border: 5px solid #fff;
+            animation: blink 1s infinite; cursor: pointer;
+        }
+        @keyframes blink { 50% { opacity: 0.5; } }
+
+    </style>
+</head>
+<body>
+
+    <div id="start-overlay">
+        <h1 style="font-size: 50px; color: var(--accent); margin-bottom: 10px;">PIXEL DRUM STATION</h1>
+        <p style="color: #ccc; margin-bottom: 30px;">8-BIT DRUMS</p>
+        <button id="start-btn">POWER ON</button>
+    </div>
+
+    <div id="ui-container" class="crt">
+        <div class="dashboard">
+            <div class="lcd-panel">
+                <div class="lcd-row">
+                    <span class="lcd-text">STATUS: ACTIVE</span>
+                    <span class="lcd-text" id="bpm-display">--</span>
+                </div>
+                <div class="lcd-row">
+                    <span class="lcd-text" style="font-size:14px;">MASTER PITCH</span>
+                    <input type="range" min="0.5" max="1.5" step="0.05" value="1.0" id="pitch-slider">
+                </div>
+                <div class="lcd-row">
+                    <span class="lcd-text" id="last-hit" style="color: var(--accent);">READY</span>
+                </div>
+            </div>
+            
+            <div style="display:flex; gap:10px;">
+                <button class="mode-btn active" id="btn-pads">PADS</button>
+                <button class="mode-btn" id="btn-stage">KIT</button>
+            </div>
+        </div>
+
+        <div class="viewport">
+            
+            <div id="pad-view">
+                <div class="pad" data-key="q" data-type="cym"><span class="pad-lbl">CRASH</span><span class="pad-key">Q</span></div>
+                <div class="pad" data-key="w" data-type="cym"><span class="pad-lbl">RIDE</span><span class="pad-key">W</span></div>
+                <div class="pad" data-key="e" data-type="cym"><span class="pad-lbl">CHINA</span><span class="pad-key">E</span></div>
+                <div class="pad" data-key="r" data-type="cym"><span class="pad-lbl">SPLASH</span><span class="pad-key">R</span></div>
+
+                <div class="pad" data-key="a" data-type="drum"><span class="pad-lbl">TOM HI</span><span class="pad-key">A</span></div>
+                <div class="pad" data-key="s" data-type="drum"><span class="pad-lbl">TOM MID</span><span class="pad-key">S</span></div>
+                <div class="pad" data-key="d" data-type="drum"><span class="pad-lbl">TOM LOW</span><span class="pad-key">D</span></div>
+                <div class="pad" data-key="f" data-type="aux"><span class="pad-lbl">BLOCK</span><span class="pad-key">F</span></div>
+
+                <div class="pad" data-key="t" data-type="timp"><span class="pad-lbl">TIMP L</span><span class="pad-key">T</span></div>
+                <div class="pad" data-key="y" data-type="timp"><span class="pad-lbl">TIMP H</span><span class="pad-key">Y</span></div>
+                <div class="pad" data-key="g" data-type="aux"><span class="pad-lbl">COWBELL</span><span class="pad-key">G</span></div>
+                <div class="pad" data-key="C" data-type="cym" style="border: 2px solid var(--accent);"><span class="pad-lbl">HAT(O)</span><span class="pad-key">SHFT+C</span></div>
+
+                <div class="pad" data-key="z" data-type="drum"><span class="pad-lbl">KICK</span><span class="pad-key">Z</span></div>
+                <div class="pad" data-key="x" data-type="drum"><span class="pad-lbl">SNARE</span><span class="pad-key">X</span></div>
+                <div class="pad" data-key="c" data-type="cym"><span class="pad-lbl">HAT(C)</span><span class="pad-key">C</span></div>
+                <div class="pad" data-key="X" data-type="drum" style="border: 2px solid var(--accent);"><span class="pad-lbl">RIM</span><span class="pad-key">SHFT+X</span></div>
+            </div>
+
+            <div id="stage-view">
+                <div class="floor"></div>
+
+                <div class="stand" style="height:120px; bottom:140px; left:22%;"></div> <div class="stand" style="height:140px; top:25%; left:27%;"></div> <div class="stand" style="height:140px; top:20%; right:27%;"></div> <div class="pix p-kick" data-key="z"><div class="p-kick-logo">PIXEL</div></div>
+                <div class="pix p-snare" data-key="x"></div>
+                
+                <div class="stand" style="height:100px; top:40%; left:50%; width:4px; margin-left:-2px;"></div>
+                <div class="pix p-tom-h" data-key="a"></div>
+                <div class="pix p-tom-m" data-key="s"></div>
+                <div class="pix p-tom-f" data-key="d"></div>
+
+                <div class="pix p-cym p-hat" data-key="c"></div>
+                <div class="pix p-cym p-crash" data-key="q"></div>
+                <div class="pix p-cym p-ride" data-key="w"></div>
+                <div class="pix p-cym p-china" data-key="e"></div>
+                <div class="pix p-cym p-splash" data-key="r"></div>
+
+                <div class="pix p-cowbell" data-key="g"></div>
+                <div class="pix p-block" data-key="f"></div>
+
+                <div class="timp-station">
+                    <div class="pix p-timp" data-key="t" style="width:100px;"></div>
+                    <div class="pix p-timp" data-key="y"></div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let ctx;
+        let master;
+        let globalPitch = 1.0;
+
+        // --- SYNTHESIS ENGINE ---
+        
+        // 1. Noise Generator (Shared buffer)
+        let noiseBuf;
+        function getNoise() {
+            if (noiseBuf) return noiseBuf;
+            const size = ctx.sampleRate * 2;
+            const buf = ctx.createBuffer(1, size, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for(let i=0; i<size; i++) d[i] = Math.random() * 2 - 1;
+            noiseBuf = buf;
+            return buf;
+        }
+
+        // 2. KICK (Punchy, Low)
+        function playKick(t) {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            // Start at 60Hz drop to 1Hz
+            osc.frequency.setValueAtTime(60 * globalPitch, t);
+            osc.frequency.exponentialRampToValueAtTime(1, t + 0.4);
+            
+            g.gain.setValueAtTime(1.0, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+            
+            osc.connect(g); g.connect(master);
+            osc.start(t); osc.stop(t + 0.4);
+        }
+
+        // 3. FLOOR TOM (Resonant, Higher than kick, longer decay)
+        function playFloorTom(t) {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            // Start 85Hz drop to 30Hz
+            osc.frequency.setValueAtTime(85 * globalPitch, t);
+            osc.frequency.exponentialRampToValueAtTime(30, t + 0.6);
+            
+            g.gain.setValueAtTime(0.9, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+            
+            // Add a little noise for the "head" strike
+            const n = ctx.createBufferSource(); n.buffer = getNoise();
+            const ng = ctx.createGain(); const nf = ctx.createBiquadFilter();
+            nf.type = 'lowpass'; nf.frequency.value = 400;
+            ng.gain.setValueAtTime(0.3, t); ng.gain.exponentialRampToValueAtTime(0.01, t+0.05);
+            n.connect(nf); nf.connect(ng); ng.connect(master);
+            n.start(t);
+
+            osc.connect(g); g.connect(master);
+            osc.start(t); osc.stop(t + 0.6);
+        }
+
+        // 4. RACK TOMS
+        function playTom(t, freq) {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.frequency.setValueAtTime(freq * globalPitch, t);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.5, t + 0.3);
+            g.gain.setValueAtTime(0.8, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+            osc.connect(g); g.connect(master);
+            osc.start(t); osc.stop(t + 0.3);
+        }
+
+        // 5. SNARE & RIM
+        function playSnare(t, isRim) {
+            // Tone
+            const osc = ctx.createOscillator();
+            const og = ctx.createGain();
+            osc.frequency.setValueAtTime((isRim?400:180) * globalPitch, t);
+            og.gain.setValueAtTime(isRim?0.3:0.6, t);
+            og.gain.exponentialRampToValueAtTime(0.01, t+0.15);
+            
+            // Noise
+            const n = ctx.createBufferSource(); n.buffer = getNoise();
+            const f = ctx.createBiquadFilter(); 
+            f.type = isRim ? 'bandpass' : 'highpass';
+            f.frequency.value = isRim ? 2000 : 1000;
+            const ng = ctx.createGain();
+            ng.gain.setValueAtTime(0.8, t);
+            ng.gain.exponentialRampToValueAtTime(0.01, t + (isRim?0.05:0.25));
+            
+            osc.connect(og); og.connect(master);
+            n.connect(f); f.connect(ng); ng.connect(master);
+            osc.start(t); osc.stop(t+0.2);
+            n.start(t); n.stop(t+0.3);
+        }
+
+        // 6. HI-HAT (Short high pitched noise)
+        function playHat(t, open) {
+            const n = ctx.createBufferSource(); n.buffer = getNoise();
+            const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.4, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t + (open ? 0.4 : 0.05));
+            n.connect(f); f.connect(g); g.connect(master);
+            n.start(t); n.stop(t+0.5);
+        }
+
+        // 7. CRASH (Long Noise Burst - Distinct from Ride)
+        function playCrash(t) {
+            const n = ctx.createBufferSource(); n.buffer = getNoise();
+            const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 3000;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.6, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t + 1.5);
+            n.connect(f); f.connect(g); g.connect(master);
+            n.start(t); n.stop(t+1.5);
+        }
+
+        // 8. RIDE (Metallic Oscillator + Sustain - Distinct from Crash)
+        function playRide(t) {
+            // The "Ping"
+            const osc = ctx.createOscillator();
+            osc.type = 'triangle'; // Clearer tone
+            osc.frequency.setValueAtTime(5000 * globalPitch, t); // High pitch ring
+            const og = ctx.createGain();
+            og.gain.setValueAtTime(0.2, t);
+            og.gain.exponentialRampToValueAtTime(0.01, t+0.5);
+            
+            // The "Wash"
+            const n = ctx.createBufferSource(); n.buffer = getNoise();
+            const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 6000; f.Q.value = 5;
+            const ng = ctx.createGain();
+            ng.gain.setValueAtTime(0.3, t);
+            ng.gain.exponentialRampToValueAtTime(0.01, t+1.0);
+            
+            osc.connect(og); og.connect(master);
+            n.connect(f); f.connect(ng); ng.connect(master);
+            osc.start(t); osc.stop(t+0.5);
+            n.start(t); n.stop(t+1.2);
+        }
+
+        // 9. TIMPANI (Pitch bend UP then down)
+        function playTimpani(t, freq) {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            
+            // Timpani characteristic: pitch slightly rises on attack then stabilizes
+            osc.frequency.setValueAtTime(freq * globalPitch, t);
+            osc.frequency.linearRampToValueAtTime(freq * 1.05 * globalPitch, t + 0.05);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.9 * globalPitch, t + 1.0);
+            
+            g.gain.setValueAtTime(0.8, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t + 1.5); // Long sustain
+            
+            osc.connect(g); g.connect(master);
+            osc.start(t); osc.stop(t+1.5);
+        }
+
+        // 10. AUX (China, Splash, Cowbell, Block)
+        function playChina(t) {
+            const n = ctx.createBufferSource(); n.buffer = getNoise();
+            const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3500; f.Q.value = 1; // Trashy
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.6, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t+0.6); // Short, explosive
+            n.connect(f); f.connect(g); g.connect(master);
+            n.start(t); n.stop(t+0.7);
+        }
+
+        function playSplash(t) {
+            const n = ctx.createBufferSource(); n.buffer = getNoise();
+            const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 6000;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.5, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t+0.3); // Very short
+            n.connect(f); f.connect(g); g.connect(master);
+            n.start(t); n.stop(t+0.4);
+        }
+
+        function playCowbell(t) {
+            const osc = ctx.createOscillator(); osc.type='square';
+            osc.frequency.value = 800 * globalPitch;
+            const f = ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1200;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.4, t); g.gain.exponentialRampToValueAtTime(0.01, t+0.2);
+            osc.connect(f); f.connect(g); g.connect(master);
+            osc.start(t); osc.stop(t+0.2);
+        }
+
+        function playBlock(t) {
+            const osc = ctx.createOscillator(); osc.type='sine';
+            osc.frequency.value = 1400 * globalPitch;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.01, t+0.05);
+            osc.connect(g); g.connect(master);
+            osc.start(t); osc.stop(t+0.1);
+        }
+
+        // --- MAPPINGS ---
+        const kit = {
+            'z': { label: 'KICK', sound: t=>playKick(t), vid:'z' },
+            'x': { label: 'SNARE', sound: t=>playSnare(t, false), vid:'x' },
+            'X': { label: 'RIMSHOT', sound: t=>playSnare(t, true), vid:'x' }, // Shift X
+            'a': { label: 'TOM HI', sound: t=>playTom(t, 250), vid:'a' },
+            's': { label: 'TOM MID', sound: t=>playTom(t, 180), vid:'s' },
+            'd': { label: 'TOM LOW', sound: t=>playFloorTom(t), vid:'d' },
+            'c': { label: 'HAT CL', sound: t=>playHat(t, false), vid:'c' },
+            'C': { label: 'HAT OP', sound: t=>playHat(t, true), vid:'c' }, // Shift C
+            'q': { label: 'CRASH', sound: t=>playCrash(t), vid:'q' },
+            'w': { label: 'RIDE', sound: t=>playRide(t), vid:'w' },
+            'e': { label: 'CHINA', sound: t=>playChina(t), vid:'e' },
+            'r': { label: 'SPLASH', sound: t=>playSplash(t), vid:'r' },
+            't': { label: 'TIMP L', sound: t=>playTimpani(t, 130), vid:'t' },
+            'y': { label: 'TIMP H', sound: t=>playTimpani(t, 170), vid:'y' },
+            'g': { label: 'COWBELL', sound: t=>playCowbell(t), vid:'g' },
+            'f': { label: 'BLOCK', sound: t=>playBlock(t), vid:'f' }
+        };
+
+        // --- INPUT HANDLING ---
+        function trigger(key) {
+            if(!ctx) return;
+            if(ctx.state === 'suspended') ctx.resume();
+
+            const drum = kit[key];
+            if(drum) {
+                drum.sound(ctx.currentTime);
+                updateUI(drum.label, key, drum.vid);
+            }
+        }
+
+        function updateUI(label, key, visualId) {
+            // LCD
+            document.getElementById('last-hit').innerText = label;
+            
+            // Pad Blink
+            const pad = document.querySelector(`.pad[data-key="${key}"]`);
+            if(pad) {
+                pad.classList.add('active');
+                setTimeout(()=>pad.classList.remove('active'), 80);
+            }
+
+            // Stage Blink (Lower case only for stage IDs)
+            if(document.getElementById('stage-view').style.display === 'block') {
+                const pix = document.querySelector(`.pix[data-key="${visualId}"]`);
+                if(pix) {
+                    pix.classList.add('active');
+                    setTimeout(()=>pix.classList.remove('active'), 80);
+                }
+            }
+        }
+
+        // Init
+        document.getElementById('start-btn').addEventListener('click', () => {
+            ctx = new AudioContext();
+            master = ctx.createGain();
+            master.gain.value = 0.6;
+            master.connect(ctx.destination);
+            document.getElementById('start-overlay').style.display = 'none';
+        });
+
+        // Key Listeners
+        document.addEventListener('keydown', e => {
+            if(e.repeat) return;
+            // Handle Shift manually
+            let k = e.key;
+            if(e.shiftKey && k.toLowerCase() === 'x') k = 'X';
+            if(e.shiftKey && k.toLowerCase() === 'c') k = 'C';
+            if(!e.shiftKey) k = k.toLowerCase();
+            
+            trigger(k);
+        });
+
+        // Touch Listeners
+        document.querySelectorAll('.pad, .pix').forEach(el => {
+            el.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                // Check if element has a data-key override (like uppercase X for rim)
+                trigger(el.dataset.key);
+            });
+        });
+
+        // UI Controls
+        document.getElementById('pitch-slider').addEventListener('input', e => {
+            globalPitch = parseFloat(e.target.value);
+            document.getElementById('bpm-display').innerText = "PITCH: " + Math.round(globalPitch*100) + "%";
+        });
+
+        const btnPads = document.getElementById('btn-pads');
+        const btnStage = document.getElementById('btn-stage');
+        const viewPads = document.getElementById('pad-view');
+        const viewStage = document.getElementById('stage-view');
+
+        btnPads.addEventListener('click', () => {
+            viewPads.style.display = 'grid'; viewStage.style.display = 'none';
+            btnPads.classList.add('active'); btnStage.classList.remove('active');
+        });
+
+        btnStage.addEventListener('click', () => {
+            viewPads.style.display = 'none'; viewStage.style.display = 'block';
+            btnPads.classList.remove('active'); btnStage.classList.add('active');
+        });
+
+    </script>
+</body>
+</html>
