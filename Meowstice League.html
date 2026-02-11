@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Meowstice League</title>
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Teko:wght@400;600;700&display=swap');
+
+    body { 
+        margin: 0; padding: 0; background: #050505; 
+        font-family: 'Teko', sans-serif; 
+        overflow: hidden; 
+        display: flex; align-items: center; justify-content: center; height: 100vh;
+        user-select: none; -webkit-user-select: none;
+    }
+
+    #game-container {
+        position: relative;
+        width: 100%; max-width: 1280px; aspect-ratio: 16/9;
+        background: #000;
+        box-shadow: 0 0 50px #2c8dff; /* BLUE GLOW */
+        overflow: hidden; border: 2px solid #333;
+    }
+
+    canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+    .screen {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(10, 15, 25, 0.95); z-index: 20;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        transition: opacity 0.2s;
+    }
+    .hidden { opacity: 0; pointer-events: none; z-index: 0 !important; }
+
+    h2 { font-size: 5vmin; color: #fff; margin: 0; text-shadow: 2px 2px 0 #000; }
+
+    /* BLUE BUTTONS */
+    .btn {
+        padding: 1vmin 3vmin; font-size: 3vmin; font-family: 'Teko'; font-weight: 600;
+        background: linear-gradient(90deg, #2c8dff, #0055aa);
+        color: #fff; border: 2px solid #aaddff; 
+        cursor: pointer; margin: 1vmin; min-width: 15vmin;
+        text-transform: uppercase; text-shadow: 1px 1px 0 #000;
+        box-shadow: 0 0.5vmin 0 #003366; transition: transform 0.1s;
+    }
+    .btn:active { transform: translateY(4px); box-shadow: none; }
+    
+    input {
+        padding: 1vmin; font-size: 3vmin; text-align: center; width: 20vmin; font-family: 'Teko'; 
+        background: rgba(10, 30, 60, 0.8); border: 2px solid #2c8dff; color: #fff; text-transform: uppercase;
+        margin: 1vmin; letter-spacing: 2px;
+        /* FIX: Allow typing on mobile/safari */
+        user-select: text; -webkit-user-select: text; 
+    }
+
+    /* PLAYER SLOTS */
+    .player-list { 
+        display: flex; gap: 1vmin; margin: 2vmin; 
+        background: rgba(0,0,0,0.5); padding: 2vmin; border-radius: 10px;
+        flex-wrap: wrap; justify-content: center; min-height: 10vmin;
+    }
+    .p-slot {
+        width: 14vmin; height: 10vmin; background: #112233; border: 2px dashed #225588;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        color: #4488aa; font-size: 2.5vmin; text-align: center; position: relative;
+    }
+    .p-slot.filled { border-style: solid; border-color: #0f0; color: #0f0; background: #002200; text-shadow: 0 0 5px #0f0; }
+    .p-slot.cpu { border-color: #0cc; color: #0cc; background: #002222; }
+
+    .kick-btn {
+        position: absolute; top: -10px; right: -10px;
+        width: 25px; height: 25px; background: #f00; color: #fff;
+        border-radius: 50%; font-size: 18px; line-height: 25px;
+        cursor: pointer; display: none; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    }
+    .p-slot:hover .kick-btn { display: block; }
+
+    /* CHAR SELECT */
+    .char-grid { display: flex; gap: 1.5vmin; justify-content: center; flex-wrap: wrap; max-width: 95%; }
+    .char-card {
+        width: 15vmin; height: 24vmin; background: #051122; border: 3px solid #225588;
+        position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+        transition: transform 0.1s; overflow: hidden;
+    }
+    .char-card:hover { transform: scale(1.05); border-color: #fff; }
+    .char-card img { width: 100%; height: 80%; object-fit: contain; position: absolute; top:0; left:0; background: #111; }
+    .char-card .info { z-index: 2; font-size: 2.5vmin; color: #fff; background: rgba(0,0,0,0.8); width: 100%; text-align: center; padding: 5px 0; }
+    .char-card.locked { filter: grayscale(1); opacity: 0.3; pointer-events: none; }
+    .char-card.taken { border-color: #555; filter: grayscale(1); opacity: 0.5; pointer-events: none; }
+    .taken-badge { position: absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-20deg); background:#a00; color:#fff; padding:2px 5px; font-size:2vmin; border:1px solid #fff; z-index: 10; }
+
+    /* HUD */
+    #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .boss-hud { position: absolute; top: 2%; left: 15%; right: 15%; height: 3vmin; border: 3px solid #550000; background: #220000; }
+    .boss-fill { height: 100%; background: linear-gradient(90deg, #f00, #800); width: 100%; transition: width 0.2s; }
+    .p-hud { position: absolute; bottom: 2%; width: 100%; display: flex; justify-content: center; gap: 1.5vmin; }
+    .p-plate { width: 12vmin; background: rgba(0,0,0,0.7); padding: 0.5vmin; border: 1px solid #2c8dff; border-radius: 4px; color: #fff; display: flex; flex-direction: column; align-items: center; }
+    .p-plate span { font-size: 1.5vmin; font-weight: bold; }
+    .p-hp-bar { width: 100%; height: 1vmin; background: #330000; margin-top: 0.5vmin; }
+    .p-hp-fill { height: 100%; background: #00ff00; width: 100%; }
+
+    #mobile-controls { position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; }
+    .touch-area { position: absolute; pointer-events: auto; background: rgba(255,255,255,0.1); border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); }
+    #dpad-l { bottom: 5vmin; left: 5vmin; width: 15vmin; height: 15vmin; }
+    #dpad-r { bottom: 5vmin; left: 22vmin; width: 15vmin; height: 15vmin; }
+    #btn-atk { bottom: 5vmin; right: 5vmin; width: 18vmin; height: 18vmin; background: rgba(255,0,0,0.2); }
+    #btn-jmp { bottom: 25vmin; right: 15vmin; width: 12vmin; height: 12vmin; background: rgba(0,255,0,0.2); }
+
+    #status { position: absolute; bottom: 5px; left: 5px; color: #2c8dff; font-size: 2vmin; z-index: 100; pointer-events: none; }
+
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="cvs" width="1280" height="720"></canvas>
+    <div id="status">Ready.</div>
+    
+    <div id="hud" class="hidden">
+        <div class="boss-hud"><div id="boss-hp" class="boss-fill"></div></div>
+        <div id="p-hud" class="p-hud"></div>
+    </div>
+
+    <div id="mobile-controls">
+        <div id="dpad-l" class="touch-area"></div>
+        <div id="dpad-r" class="touch-area"></div>
+        <div id="btn-atk" class="touch-area"></div>
+        <div id="btn-jmp" class="touch-area"></div>
+    </div>
+
+    <div id="menu-main" class="screen">
+        <img src="logo.png" style="max-width: 80%; max-height: 25vmin; margin-bottom: -30vmin;" alt="MEOWSTICE LEAGUE">
+        
+        <div id="lobby-ui" class="hidden" style="text-align: center; width: 100%;">
+            <div id="room-code" style="font-size: 4vmin; color: #0f0; margin-bottom: 10px;">KEY: <span id="key-display">---</span></div>
+            
+            <div class="player-list" id="player-list"></div>
+            
+            <button class="btn btn-blue" id="btn-add-cpu" onclick="addCpu()">+ ADD CPU</button>
+            <br>
+            <div id="waiting-msg" style="color: #0cc; font-size: 3vmin; margin: 10px;">WAITING FOR PLAYERS...</div>
+            <button class="btn" id="btn-start" onclick="startSelection()">START GAME</button>
+        </div>
+
+        <div id="setup-ui">
+            <button class="btn" onclick="initHost()">HOST GAME</button>
+            <div style="margin: 10px;">
+                <input id="join-input" placeholder="ROOM KEY" maxlength="4">
+                <button class="btn" onclick="initJoin()">JOIN</button>
+            </div>
+            <div style="font-size: 2vmin; color: #666; margin-top:20px;">CLICK SCREEN FOR AUDIO</div>
+        </div>
+    </div>
+
+    <div id="menu-char" class="screen hidden">
+        <h2 id="select-title" style="color:#ffcc00">CHOOSE HERO</h2>
+        <div id="char-grid" class="char-grid"></div>
+    </div>
+
+    <div id="menu-over" class="screen hidden">
+        <h1 id="win-msg" style="font-size:12vmin; color:#2c8dff; text-shadow: 0 0 30px #004488, 4px 4px 0px #000; text-transform:uppercase; margin-bottom: 2vmin;">GAME OVER</h1>
+        <button class="btn" onclick="location.reload()">MAIN MENU</button>
+    </div>
+</div>
+
+<script>
+/* --- ASSETS & CONFIG --- */
+const CHARS = ['The Betmen', 'Soupermen', 'Flush', 'Aquacat', 'Darkmeow'];
+const COLORS = {
+    'The Betmen':'#444', 'Soupermen':'#05a', 'Flush':'#a00', 'Aquacat':'#088', 'Darkmeow':'#111'
+};
+
+const STATS = {
+    'The Betmen':    {hp:320, atk:35, spd:10, jmp:18},
+    'Soupermen':     {hp:550, atk:45, spd:8, jmp:16},
+    'Flush':         {hp:220, atk:25, spd:18, jmp:22},
+    'Aquacat':       {hp:280, atk:30, spd:12, jmp:24},
+    'Darkmeow':      {hp:1200, atk:65, spd:9, jmp:20}
+};
+
+const PLATFORMS = [
+    {x:300, y:550, w:300, h:30}, {x:800, y:450, w:300, h:30}, 
+    {x:100, y:350, w:200, h:30}, {x:1000, y:300, w:200, h:30},
+    {x:-500, y:680, w:3000, h:100} 
+];
+
+// LOAD IMAGES
+const IMAGES = {};
+[...CHARS, 'crate', 'potion', 'speed'].forEach(n => {
+    let i = new Image(); 
+    i.src = n + '.png'; 
+    IMAGES[n] = i;
+});
+
+// BG IMAGE
+const bgImg = new Image();
+bgImg.src = 'bg.png';
+
+/* --- NETWORK & STATE --- */
+let peer, conn, connections = [];
+let myId = 'p1', isHost = false;
+let gameState = 'MENU';
+let players = ['p1']; 
+const MAX_PLAYERS = 5; 
+let turnOrder = [], turnIndex = 0;
+let choices = {}; 
+let entities = [], items = [], particles = [], inputs = {};
+let clientPack = null;
+let bgStars = [];
+
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+const uiStatus = document.getElementById('status');
+function log(msg) { uiStatus.innerText = msg; }
+
+/* --- BACKGROUND --- */
+function initStars() {
+    bgStars = [];
+    for(let i=0; i<100; i++) {
+        bgStars.push({x:Math.random()*1280, y:Math.random()*720, s:Math.random()*2});
+    }
+}
+function drawBg() {
+    if(bgImg.complete && bgImg.naturalWidth !== 0) {
+        ctx.drawImage(bgImg, 0, 0, 1280, 720);
+    } else {
+        let grad = ctx.createLinearGradient(0,0,0,720);
+        grad.addColorStop(0, '#001133'); grad.addColorStop(1, '#000');
+        ctx.fillStyle = grad; ctx.fillRect(0,0,1280,720);
+    }
+}
+
+/* --- AUDIO --- */
+const AudioSys = {
+    ctx: null,
+    init: function() {
+        if(!this.ctx) { 
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)(); 
+            document.addEventListener('click', () => { if(this.ctx.state === 'suspended') this.ctx.resume(); }, {once:true});
+        }
+    },
+    play: function(type) {
+        if(!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        const now = this.ctx.currentTime;
+        
+        if(type === 'jump') {
+            osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(300, now+0.1);
+            gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now+0.1);
+            osc.start(now); osc.stop(now+0.1);
+        } else if(type === 'atk') {
+            osc.type = 'square'; osc.frequency.setValueAtTime(100, now); osc.frequency.exponentialRampToValueAtTime(50, now+0.1);
+            gain.gain.setValueAtTime(0.05, now); gain.gain.linearRampToValueAtTime(0, now+0.1);
+            osc.start(now); osc.stop(now+0.1);
+        } else if(type === 'powerup') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.linearRampToValueAtTime(800, now+0.2);
+            gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now+0.2);
+            osc.start(now); osc.stop(now+0.2);
+        }
+    }
+};
+
+/* --- LOBBY SYSTEM --- */
+function initHost() {
+    AudioSys.init(); initStars();
+    peer = new Peer('mlg-' + Math.floor(Math.random()*9000+1000));
+    peer.on('open', id => {
+        isHost = true; myId = 'p1';
+        let key = id.split('-')[1];
+        document.getElementById('setup-ui').classList.add('hidden');
+        document.getElementById('lobby-ui').classList.remove('hidden');
+        document.getElementById('key-display').innerText = key;
+        document.getElementById('btn-start').style.display = 'inline-block';
+        document.getElementById('btn-add-cpu').style.display = 'inline-block';
+        document.getElementById('waiting-msg').style.display = 'none';
+        log('Room: ' + key);
+        updateLobbyUI();
+    });
+    peer.on('connection', c => {
+        if(players.length >= MAX_PLAYERS) { c.close(); return; }
+        c.on('open', () => {
+            let newId = 'p' + (players.filter(p => p.startsWith('p')).length + 1);
+            c.peerId = newId; 
+            connections.push(c);
+            players.push(newId);
+            c.send({type:'WELCOME', id:newId, players:players});
+            broadcast({type:'LOBBY_UPDATE', players:players});
+            updateLobbyUI();
+        });
+        c.on('data', d => handleData(d, c.peerId));
+        c.on('close', () => kickPlayer(c.peerId, false));
+    });
+}
+
+function initJoin() {
+    AudioSys.init(); initStars();
+    let key = document.getElementById('join-input').value.trim();
+    if(key.length !== 4) return log('Invalid Key (Must be 4 chars)');
+    
+    log('Connecting to ' + key + '...'); // VISUAL FEEDBACK
+    
+    peer = new Peer();
+    peer.on('open', () => {
+        conn = peer.connect('mlg-'+key);
+        
+        conn.on('open', () => {
+            document.getElementById('setup-ui').classList.add('hidden');
+            document.getElementById('lobby-ui').classList.remove('hidden');
+            document.getElementById('btn-start').style.display = 'none';
+            document.getElementById('btn-add-cpu').style.display = 'none';
+            document.getElementById('room-code').innerText = "CONNECTED!";
+            log('Connected');
+        });
+        conn.on('data', d => handleData(d));
+    });
+    
+    // Handle incorrect keys or connection issues
+    peer.on('error', (err) => {
+        log('Connection Failed: Room not found.');
+    });
+}
+
+function addCpu() {
+    if(players.length >= MAX_PLAYERS) return;
+    let cpuId = 'cpu' + (Math.floor(Math.random()*999));
+    players.push(cpuId);
+    broadcast({type:'LOBBY_UPDATE', players:players});
+    updateLobbyUI();
+}
+
+function kickPlayer(pid, explicit=true) {
+    if(!isHost) return;
+    if(pid === myId) return; 
+    players = players.filter(p => p !== pid);
+    let connToKick = connections.find(c => c.peerId === pid);
+    if(connToKick) {
+        if(explicit) connToKick.send({type:'KICKED'});
+        connToKick.close();
+        connections = connections.filter(c => c !== connToKick);
+    }
+    broadcast({type:'LOBBY_UPDATE', players:players});
+    updateLobbyUI();
+}
+
+function updateLobbyUI() {
+    const list = document.getElementById('player-list');
+    list.innerHTML = '';
+    players.forEach(pid => {
+        let div = document.createElement('div');
+        div.className = 'p-slot filled';
+        if(pid.startsWith('cpu')) div.className += ' cpu';
+        div.innerHTML = `<div>${pid}</div>${pid===myId?"(YOU)":""}`;
+        if(isHost && pid !== myId) {
+            let btn = document.createElement('span');
+            btn.className = 'kick-btn'; btn.innerText = "X";
+            btn.onclick = (e) => { e.stopPropagation(); kickPlayer(pid); };
+            div.appendChild(btn);
+        }
+        list.appendChild(div);
+    });
+    for(let i=players.length; i<MAX_PLAYERS; i++) {
+        let div = document.createElement('div');
+        div.className = 'p-slot'; div.innerText = "EMPTY";
+        list.appendChild(div);
+    }
+}
+
+function broadcast(msg) { connections.forEach(c => c.send(msg)); }
+
+/* --- DATA HANDLING --- */
+function handleData(data, senderId) {
+    if(data.type === 'WELCOME') { myId = data.id; players = data.players; updateLobbyUI(); }
+    if(data.type === 'LOBBY_UPDATE') { players = data.players; updateLobbyUI(); }
+    if(data.type === 'KICKED') { location.reload(); }
+    if(data.type === 'GOTO_SELECT') { 
+        gameState = 'SELECT'; turnOrder = data.order; choices = data.choices;
+        document.getElementById('menu-main').classList.add('hidden');
+        document.getElementById('menu-char').classList.remove('hidden');
+        renderCharGrid();
+    }
+    if(data.type === 'UPDATE_SELECT') { choices = data.choices; turnIndex = data.idx; renderCharGrid(); }
+    if(data.type === 'START_GAME') { 
+        entities = data.ents; items = data.items; gameState = 'PLAY'; 
+        document.getElementById('menu-char').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        
+        // --- FIX P2 MOVEMENT: START BOTH LOOPS ---
+        if(!isHost) {
+            loopClient(); // Starts Input Sending Loop
+            loopRender(); // Starts Visual Loop
+        }
+    }
+    if(data.type === 'GAME_PACK') { clientPack = data; }
+    if(data.type === 'INPUT') { inputs[senderId] = data.input; }
+    if(data.type === 'PICK') { handlePick(senderId, data.char); }
+    if(data.type === 'OVER') { 
+        document.getElementById('menu-over').classList.remove('hidden');
+        document.getElementById('win-msg').innerText = data.winner;
+        document.getElementById('hud').classList.add('hidden');
+        gameState = 'OVER';
+    }
+}
+
+/* --- SELECTION --- */
+function startSelection() {
+    if(!isHost) return;
+    turnOrder = [...players].sort((a, b) => {
+        let aCpu = a.startsWith('cpu'), bCpu = b.startsWith('cpu');
+        if(aCpu && !bCpu) return 1; if(!aCpu && bCpu) return -1;
+        return 0;
+    });
+    choices = {}; players.forEach(p => choices[p] = null);
+    turnIndex = 0;
+    let msg = {type:'GOTO_SELECT', order:turnOrder, choices:choices};
+    broadcast(msg); handleData(msg);
+    processTurn();
+}
+
+function processTurn() {
+    if(turnIndex >= turnOrder.length) { setTimeout(launchGame, 1000); return; }
+    let pid = turnOrder[turnIndex];
+    if(pid.startsWith('cpu')) {
+        setTimeout(() => {
+            let available = CHARS.filter(c => !Object.values(choices).includes(c));
+            let pick = available[Math.floor(Math.random()*available.length)];
+            handlePick(pid, pick);
+        }, 800);
+    }
+}
+
+function handlePick(pid, char) {
+    if(turnOrder[turnIndex] !== pid) return;
+    if(Object.values(choices).includes(char)) return; 
+    choices[pid] = char; turnIndex++; AudioSys.play('powerup');
+    let msg = {type:'UPDATE_SELECT', choices:choices, idx:turnIndex};
+    if(isHost) { broadcast(msg); handleData(msg); processTurn(); }
+}
+
+function sendPick(char) {
+    if(isHost) handlePick(myId, char);
+    else conn.send({type:'PICK', char:char});
+}
+
+function renderCharGrid() {
+    const grid = document.getElementById('char-grid');
+    grid.innerHTML = '';
+    let activeP = turnOrder[turnIndex];
+    let isMyTurn = (activeP === myId);
+    document.getElementById('select-title').innerText = isMyTurn ? "YOUR TURN" : `WAITING FOR ${activeP}...`;
+
+    CHARS.forEach(c => {
+        let div = document.createElement('div');
+        div.className = 'char-card';
+        div.style.background = COLORS[c];
+        div.innerHTML = `<img src="${c}.png" onerror="this.style.display='none'"><div class="info">${c}</div>`;
+        let owner = Object.keys(choices).find(key => choices[key] === c);
+        if(owner) {
+            div.className += ' taken';
+            div.innerHTML += `<div class="taken-badge">${owner}</div>`;
+        } else if(!isMyTurn) {
+            div.className += ' locked';
+        } else {
+            div.onclick = () => sendPick(c);
+        }
+        grid.appendChild(div);
+    });
+}
+
+/* --- GAME LOGIC --- */
+function launchGame() {
+    let pack = [];
+    players.forEach((pid, i) => {
+        let char = choices[pid];
+        let s = STATS[char];
+        let isBoss = (char === 'Darkmeow');
+        pack.push({
+            id: pid, type: char, 
+            x: isBoss ? 1100 : 50 + i*100, 
+            y: 0, 
+            w: isBoss ? 100 : 60, h: isBoss ? 140 : 90, 
+            vx:0, vy:0, 
+            hp: s.hp, max: s.hp, 
+            team: isBoss ? 'BAD' : 'GOOD', 
+            dead: false, face: isBoss ? -1 : 1
+        });
+    });
+    
+    entities = pack;
+    spawnItem();
+
+    let msg = {type:'START_GAME', ents:entities, items:items};
+    broadcast(msg); handleData(msg);
+    
+    setInterval(gameLoopHost, 1000/60); 
+    setInterval(networkLoop, 50);       
+    loopRender();                        
+}
+
+function spawnItem() {
+    if(items.length < 3) {
+        let t = Math.random();
+        let type = t<0.6 ? 'crate' : (t<0.8 ? 'potion' : 'speed');
+        items.push({ x: 200 + Math.random()*800, y: 0, type: type, vy:0, dead:false });
+    }
+}
+
+// 1. PHYSICS LOOP
+function gameLoopHost() {
+    if(gameState !== 'PLAY' || !isHost) return;
+
+    if(Math.random() < 0.005) spawnItem();
+
+    entities.forEach(e => {
+
+        // 1. Skip if dead (NO RESPAWNS)
+        if (e.dead) return;
+
+        // 2. Detect Death (HP empty or fell off map)
+        if (e.hp <= 0 || e.y > 800) {
+            e.dead = true;
+            e.hp = 0; 
+            addPart(e.x, e.y, "KO!", "#f00");
+            return;
+        }
+
+        // --- FIXED INPUT READING LOGIC ---
+        let k = {};
+        if(e.id.startsWith('cpu')) {
+            let target = entities.find(t => t.team !== e.team && !t.dead);
+            if(target) {
+                if(target.x > e.x + 50) k.r = true;
+                if(target.x < e.x - 50) k.l = true;
+                if(Math.random()<0.02) k.atk = true;
+                if(target.y < e.y - 50 && Math.random()<0.02) k.jmp = true;
+            }
+        } else {
+            k = e.id===myId ? myInput : (inputs[e.id] || {});
+        }
+
+        let s = STATS[e.type];
+        if(k.r) { e.vx = s.spd; e.face = 1; }
+        else if(k.l) { e.vx = -s.spd; e.face = -1; }
+        else e.vx *= 0.8;
+
+        if(k.jmp && e.grounded) { e.vy = -s.jmp; e.grounded = false; AudioSys.play('jump'); }
+        e.vy += 0.8; 
+
+        e.x += e.vx; e.y += e.vy; e.grounded = false;
+
+        PLATFORMS.forEach(p => {
+            if(e.x < p.x+p.w && e.x+e.w > p.x && e.y+e.h > p.y && e.y < p.y+p.h) {
+                if(e.vy > 0 && e.y+e.h-e.vy <= p.y+20) { e.y = p.y - e.h; e.vy = 0; e.grounded = true; }
+            }
+        });
+
+        if(e.x < 0) e.x = 0; if(e.x > 1280-e.w) e.x = 1280-e.w;
+        
+        if(k.atk && !e.cooldown) {
+            e.cooldown = 30; AudioSys.play('atk');
+            let cx = e.x + e.w/2 + (e.face*40), cy = e.y + e.h/2;
+            entities.forEach(v => {
+                if(v.id !== e.id && v.team !== e.team && !v.dead) {
+                    if(Math.abs(v.x+v.w/2 - cx) < 80 && Math.abs(v.y+v.h/2 - cy) < 60) {
+                        v.hp -= s.atk; v.vy = -5; v.vx = e.face * 10;
+                        addPart(v.x, v.y, '-'+s.atk, '#f00');
+                        if(v.hp <= 0) v.dead = true;
+                    }
+                }
+            });
+            items.forEach(i => {
+                if(i.type === 'crate' && Math.abs(i.x+20 - cx) < 80 && Math.abs(i.y+20 - cy) < 60) {
+                    i.dead = true;
+                    items.push({x:i.x, y:i.y-20, type:(Math.random()>0.5?'potion':'speed'), vy:-5});
+                }
+            });
+        }
+        if(e.cooldown > 0) e.cooldown--;
+    });
+
+    items.forEach(i => {
+        if(i.dead) return;
+        i.vy = (i.vy || 0) + 0.5; i.y += i.vy;
+        PLATFORMS.forEach(p => {
+            if(i.x < p.x+p.w && i.x+40 > p.x && i.y+40 > p.y && i.y < p.y+p.h) {
+                if(i.vy > 0 && i.y+40-i.vy <= p.y+20) { i.y = p.y - 40; i.vy = 0; }
+            }
+        });
+        if(i.type !== 'crate') {
+            entities.forEach(e => {
+                if(!e.dead && Math.abs(e.x+e.w/2 - i.x) < 50 && Math.abs(e.y+e.h/2 - i.y) < 50) {
+                    i.dead = true; AudioSys.play('powerup');
+                    if(i.type === 'potion') { e.hp += 150; if(e.hp>e.max)e.hp=e.max; addPart(e.x,e.y,'HP+','#0f0'); }
+                    if(i.type === 'speed') { STATS[e.type].spd += 3; addPart(e.x,e.y,'SPD+','#0ff'); }
+                }
+            });
+        }
+    });
+    items = items.filter(i => !i.dead);
+    particles.forEach(p => { p.y-=1; p.life--; }); particles = particles.filter(p => p.life > 0);
+
+    let heroes = entities.filter(e => e.team === 'GOOD' && !e.dead);
+    let villains = entities.filter(e => e.team === 'BAD' && !e.dead);
+    if(heroes.length === 0) endGame("BOSS WINS");
+    if(villains.length === 0) endGame("HEROES WIN");
+}
+
+function networkLoop() {
+    if(gameState === 'PLAY' && isHost) {
+        broadcast({type:'GAME_PACK', ents:entities, items:items, parts:particles});
+    }
+}
+
+function loopRender() {
+    if(gameState !== 'PLAY') return;
+    render();
+    requestAnimationFrame(loopRender);
+}
+
+// 4. CLIENT LOGIC
+function loopClient() {
+    if(gameState !== 'PLAY') return;
+    
+    // --- FIX P2 MOVEMENT: SEND INPUT CONTINUOUSLY ---
+    if(conn && conn.open) {
+        conn.send({type:'INPUT', input:myInput});
+    }
+
+    // Call this again in 30ms (approx 30fps)
+    setTimeout(loopClient, 30);
+}
+
+function endGame(msg) {
+    gameState = 'OVER';
+    broadcast({type:'OVER', winner:msg});
+    handleData({type:'OVER', winner:msg});
+}
+
+function render() {
+    let drawEnts = isHost ? entities : (clientPack ? clientPack.ents : []);
+    let drawItems = isHost ? items : (clientPack ? clientPack.items : []);
+    let drawParts = isHost ? particles : (clientPack ? clientPack.parts : []);
+
+    drawBg();
+    
+    ctx.fillStyle = '#222'; ctx.strokeStyle = '#0ff'; ctx.lineWidth = 2;
+    PLATFORMS.forEach(p => { ctx.fillRect(p.x,p.y,p.w,p.h); ctx.strokeRect(p.x,p.y,p.w,p.h); });
+
+    drawItems.forEach(i => {
+        let img = IMAGES[i.type];
+        if(img.complete && img.naturalWidth) ctx.drawImage(img, i.x, i.y, 40, 40);
+        else { ctx.fillStyle='#ff0'; ctx.fillRect(i.x, i.y, 40, 40); }
+    });
+
+    drawEnts.forEach(e => {
+        if(e.dead) return;
+        ctx.save(); ctx.translate(e.x+e.w/2, e.y+e.h/2);
+        if(e.face === -1) ctx.scale(-1, 1);
+        
+        let img = IMAGES[e.type];
+        if(img.complete && img.naturalWidth) {
+            ctx.drawImage(img, -e.w/2, -e.h/2, e.w, e.h);
+        } else {
+            ctx.fillStyle = COLORS[e.type]; ctx.fillRect(-e.w/2, -e.h/2, e.w, e.h);
+        }
+        
+        ctx.restore();
+        
+        ctx.fillStyle = '#fff'; ctx.font = "20px Teko"; ctx.textAlign="center";
+        ctx.fillText(e.id, e.x+e.w/2, e.y-10);
+        ctx.fillStyle = '#f00'; ctx.fillRect(e.x, e.y-8, e.w, 5);
+        ctx.fillStyle = '#0f0'; ctx.fillRect(e.x, e.y-8, e.w * (Math.max(0,e.hp)/e.max), 5);
+    });
+
+    drawParts.forEach(p => { 
+        ctx.fillStyle = p.col; ctx.font = "bold 30px Teko"; ctx.fillText(p.txt, p.x, p.y); 
+        ctx.strokeStyle = '#000'; ctx.strokeText(p.txt, p.x, p.y);
+    });
+    
+    updateHud(drawEnts);
+}
+
+function updateHud(ents) {
+    let boss = ents.find(e => e.team === 'BAD');
+    if(boss) document.getElementById('boss-hp').style.width = (Math.max(0,boss.hp)/boss.max * 100) + "%";
+    
+    let phud = document.getElementById('p-hud'); phud.innerHTML = '';
+    ents.forEach(e => {
+        if(e.team === 'GOOD') {
+            let div = document.createElement('div'); div.className = 'p-plate';
+            div.innerHTML = `<span>${e.id}</span><div class="p-hp-bar"><div class="p-hp-fill" style="width:${(e.hp/e.max)*100}%"></div></div>`;
+            phud.appendChild(div);
+        }
+    });
+}
+
+function addPart(x, y, txt, col) { particles.push({x:x, y:y, txt:txt, col:col, life:30}); }
+
+let myInput = {l:false, r:false, jmp:false, atk:false};
+window.onkeydown = e => {
+    if(e.code==='ArrowLeft') myInput.l=true; if(e.code==='ArrowRight') myInput.r=true;
+    if(e.code==='ArrowUp') myInput.jmp=true; if(e.code==='Space') myInput.atk=true;
+};
+window.onkeyup = e => {
+    if(e.code==='ArrowLeft') myInput.l=false; if(e.code==='ArrowRight') myInput.r=false;
+    if(e.code==='ArrowUp') myInput.jmp=false; if(e.code==='Space') myInput.atk=false;
+};
+const touch = (id, key) => {
+    let el = document.getElementById(id);
+    el.addEventListener('touchstart', e => { e.preventDefault(); myInput[key]=true; });
+    el.addEventListener('touchend', e => { e.preventDefault(); myInput[key]=false; });
+};
+touch('dpad-l', 'l'); touch('dpad-r', 'r'); touch('btn-jmp', 'jmp'); touch('btn-atk', 'atk');
+if('ontouchstart' in window) document.getElementById('mobile-controls').style.opacity = 1;
+</script>
+</body>
+</html>

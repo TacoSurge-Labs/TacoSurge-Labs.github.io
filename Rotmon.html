@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rotmon</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap');
+
+        :root {
+            --vio-main: #673ab7;
+            --vio-dark: #311b92;
+            --hp-green: #00e676;
+            --hp-red: #ff1744;
+            --xp-blue: #2979ff;
+        }
+
+        body {
+            margin: 0; background: #050505;
+            font-family: 'Chakra Petch', sans-serif;
+            overflow: hidden; touch-action: none; user-select: none;
+            display: flex; flex-direction: column; height: 100vh;
+        }
+
+        /* WORLD */
+        #viewport {
+            position: relative; width: 100%; height: 60%;
+            background: linear-gradient(to bottom, #1a0b2e, #000);
+            overflow: hidden;
+        }
+        
+        canvas { width: 100%; height: 100%; display: block; }
+
+        /* HUD */
+        .hud-panel {
+            position: absolute;
+            background: rgba(0,0,0,0.7);
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 12px; border-radius: 8px;
+            color: white; min-width: 150px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        #hud-enemy { top: 20px; left: 20px; }
+        #hud-player { bottom: 20px; right: 20px; text-align: right; }
+
+        .name-row { font-weight: bold; font-size: 14px; margin-bottom: 4px; display: flex; justify-content: space-between;}
+        
+        .bar-wrap { height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-bottom: 2px; }
+        .hp-fill { height: 100%; width: 100%; background: var(--hp-green); transition: width 0.3s; }
+        .xp-fill { height: 100%; width: 0%; background: var(--xp-blue); transition: width 0.5s; }
+        .bar-label { font-size: 10px; color: #aaa; letter-spacing: 1px; }
+
+        /* CONTROLS */
+        #bottom-panel {
+            height: 40%; background: #111;
+            border-top: 4px solid var(--vio-main);
+            display: flex; flex-direction: column;
+            padding: 10px; gap: 10px; z-index: 100;
+        }
+
+        #battle-log {
+            height: 45px; background: #000;
+            border: 2px solid #444; border-radius: 8px;
+            padding: 8px; color: #fff;
+            display: flex; align-items: center;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }
+
+        #action-box {
+            flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+        }
+
+        .btn {
+            background: #222; color: white;
+            border: 2px solid #555; border-radius: 6px;
+            font-family: inherit; font-weight: bold; font-size: 14px;
+            text-transform: uppercase; cursor: pointer;
+            position: relative; overflow: hidden;
+        }
+        .btn:active { background: var(--vio-main); transform: scale(0.98); }
+        .btn:disabled { opacity: 0.4; }
+        
+        .type-phys { border-bottom: 3px solid #e53935; }
+        .type-spec { border-bottom: 3px solid #2979ff; }
+        .type-stat { border-bottom: 3px solid #aaa; }
+
+        /* EVOLUTION ANIMATION CSS */
+        @keyframes evo-flash {
+            0% { filter: brightness(1); transform: scale(1); }
+            50% { filter: brightness(100); transform: scale(1.2); }
+            100% { filter: brightness(1); transform: scale(1); }
+        }
+        .evolving { animation: evo-flash 1s ease-in-out; }
+
+    </style>
+</head>
+<body>
+
+    <div id="viewport">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="hud-enemy" class="hud-panel">
+            <div class="name-row"><span id="e-name">Enemy</span> <span id="e-lvl">Lv.5</span></div>
+            <div class="bar-wrap"><div id="e-hp" class="hp-fill"></div></div>
+        </div>
+
+        <div id="hud-player" class="hud-panel">
+            <div class="name-row"><span id="p-name">Player</span> <span id="p-lvl">Lv.5</span></div>
+            <div class="bar-wrap"><div id="p-hp" class="hp-fill"></div></div>
+            <div class="bar-wrap" style="height: 4px; background:#222;"><div id="p-xp" class="xp-fill"></div></div>
+            <div class="bar-label" id="p-hp-text">100/100</div>
+        </div>
+    </div>
+
+    <div id="bottom-panel">
+        <div id="battle-log">Welcome to Rotmon. Made by TacoSurge Labs.</div>
+        <div id="action-box"></div>
+    </div>
+
+<script>
+/**
+ * ROTMON: EVOLUTION & PROCEDURAL GENERATION ENGINE
+ */
+
+// --- DATABASES ---
+
+const SPECIES_TYPES = [
+    { id: 'doge', name: 'Cheems', color: '#e6904e', scale: 1.0 },
+    { id: 'toilet', name: 'Skibidi', color: '#eeeeee', scale: 0.9 },
+    { id: 'pepe', name: 'Pepe', color: '#4caf50', scale: 1.0 },
+    { id: 'chad', name: 'Giga', color: '#9e9e9e', scale: 1.1 },
+    { id: 'capy', name: 'Capy', color: '#795548', scale: 0.9 },
+    { id: 'blob', name: 'Grimace', color: '#6a1b9a', scale: 1.2 }
+];
+
+const ELEMENTS = [
+    { id: 'norm', name: '', colorMod: null },
+    { id: 'fire', name: 'Spicy', colorMod: '#ff5722' },
+    { id: 'void', name: 'Dark', colorMod: '#311b92' },
+    { id: 'glitch', name: 'Glitch', colorMod: '#00e5ff' },
+    { id: 'gold', name: 'Rich', colorMod: '#ffd700' }
+];
+
+const ATTACKS = [
+    { name: 'Bonk', pwr: 40, acc: 0.95, desc: "swung a bat! BONK!" },
+    { name: 'Yeet', pwr: 80, acc: 0.75, desc: "threw a massive object!" },
+    { name: 'Rizz', pwr: 0,  acc: 0.9,  desc: "stared deeply. Enemy is uncomfortable.", type:'stat' },
+    { name: 'Ratio', pwr: 60, acc: 1.0, desc: "got more likes than the enemy." },
+    { name: 'Cringe', pwr: 50, acc: 1.0, desc: "posted something awful." },
+    { name: 'Ohio', pwr: 110, acc: 0.6, desc: "unleashed pure chaos!" },
+    { name: 'Tax', pwr: 55, acc: 0.95, desc: "stole some food (and HP)!" },
+    { name: 'Mew', pwr: 30, acc: 1.0, desc: "sharpened its jawline." },
+    { name: 'Gaze', pwr: 0, acc: 0.8, desc: "froze the enemy in fear!", type:'stat' },
+    { name: 'Flush', pwr: 70, acc: 0.9, desc: "pulled the handle. Swirl!" }
+];
+
+// --- PROCEDURAL GENERATOR ---
+const Generator = {
+    create(level) {
+        const spec = SPECIES_TYPES[Math.floor(Math.random() * SPECIES_TYPES.length)];
+        const elem = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
+        
+        // Stat calculations
+        const hp = 80 + (level * 10) + Math.floor(Math.random()*20);
+        
+        // Pick 4 Random Moves
+        const moves = [];
+        while(moves.length < 4) {
+            const m = ATTACKS[Math.floor(Math.random() * ATTACKS.length)];
+            if(!moves.includes(m)) moves.push(m);
+        }
+
+        return {
+            id: Math.random(),
+            species: spec.id,
+            element: elem.id,
+            baseName: spec.name,
+            name: (elem.name ? elem.name + ' ' : '') + spec.name,
+            level: level,
+            xp: 0,
+            maxXp: level * 100,
+            hp: hp,
+            maxHp: hp,
+            color: elem.colorMod || spec.color,
+            scale: spec.scale,
+            moves: moves,
+            isShiny: Math.random() < 0.05
+        };
+    },
+
+    evolve(mon) {
+        if (mon.level === 5) {
+            mon.name = "Alpha " + mon.name;
+            mon.scale *= 1.2;
+            mon.maxHp += 50;
+            mon.hp += 50;
+            return true;
+        }
+        if (mon.level === 10) {
+            mon.name = "Omega " + mon.name;
+            mon.scale *= 1.2;
+            mon.maxHp += 100;
+            mon.hp += 100;
+            mon.color = "#ff0000"; // Enraged color
+            return true;
+        }
+        return false;
+    }
+};
+
+// --- GRAPHICS ENGINE (CANVAS ART) ---
+const GFX = {
+    ctx: null, W: 0, H: 0,
+    
+    init() {
+        const c = document.getElementById('game-canvas');
+        this.ctx = c.getContext('2d');
+        this.resize(c);
+        window.onresize = () => this.resize(c);
+    },
+
+    resize(c) {
+        c.width = c.parentElement.clientWidth;
+        c.height = c.parentElement.clientHeight;
+        this.W = c.width; this.H = c.height;
+    },
+
+    draw() {
+        const c = this.ctx;
+        c.clearRect(0,0,this.W,this.H);
+
+        // Background
+        c.fillStyle = '#1a0b2e'; c.fillRect(0, this.H*0.5, this.W, this.H);
+        
+        // Grid
+        c.strokeStyle = 'rgba(103, 58, 183, 0.4)'; c.lineWidth = 2; c.beginPath();
+        for(let i=-10; i<20; i++) {
+            let x = (this.W/2) + (i*50);
+            c.moveTo(this.W/2 + (i*10), this.H*0.5); c.lineTo(x*4, this.H);
+        }
+        c.stroke();
+
+        // Render Monsters
+        if(Game.enemy) this.drawMon(Game.enemy, this.W*0.75, this.H*0.55, false);
+        if(Game.activeMon) this.drawMon(Game.activeMon, this.W*0.25, this.H*0.75, true);
+    },
+
+    drawMon(mon, x, y, isBack) {
+        const c = this.ctx;
+        c.save();
+        c.translate(x, y);
+        
+        // Breathe Animation
+        const breathe = Math.sin(Date.now()/400) * 5;
+        c.translate(0, breathe);
+        
+        let s = mon.scale * (isBack ? 2.2 : 1.3);
+        c.scale(s, s);
+
+        // Shadow
+        c.fillStyle = "rgba(0,0,0,0.5)";
+        c.beginPath(); c.ellipse(0, 10, 40, 10, 0, 0, Math.PI*2); c.fill();
+
+        // Procedural Drawing based on Species
+        c.fillStyle = mon.color;
+        
+        if(mon.species === 'doge') {
+            // Head
+            this.roundRect(c, -30, -40, 60, 50, 20); // Head
+            // Ears
+            c.beginPath(); c.moveTo(-25,-35); c.lineTo(-35,-55); c.lineTo(-10,-40); c.fill();
+            c.beginPath(); c.moveTo(25,-35); c.lineTo(35,-55); c.lineTo(10,-40); c.fill();
+            // Face
+            if(!isBack) this.drawFace(c, 0, -25);
+        } 
+        else if (mon.species === 'toilet') {
+            c.fillStyle = "#fff";
+            c.fillRect(-30, -10, 60, 40); // Bowl
+            c.fillRect(-30, -60, 60, 50); // Tank
+            c.fillStyle = mon.color === '#eeeeee' ? '#d1c4e9' : mon.color; 
+            // Head popping out
+            c.beginPath(); c.arc(0, -20, 20, 0, Math.PI*2); c.fill();
+            if(!isBack) this.drawFace(c, 0, -25);
+        }
+        else if (mon.species === 'pepe' || mon.species === 'blob') {
+            c.beginPath(); c.arc(0, -30, 35, 0, Math.PI*2); c.fill(); // Round Body
+            if(!isBack) this.drawFace(c, 0, -35);
+        }
+        else if (mon.species === 'chad' || mon.species === 'capy') {
+            c.fillRect(-25, -60, 50, 60); // Block Body
+            if(!isBack) this.drawFace(c, 0, -40);
+        }
+
+        // BACKPACK (if player)
+        if(isBack) {
+            c.fillStyle = "rgba(0,0,0,0.3)";
+            c.fillRect(-20, -40, 40, 40);
+        }
+
+        c.restore();
+    },
+
+    drawFace(c, x, y) {
+        c.fillStyle = "white";
+        c.beginPath(); c.arc(x-10, y, 8, 0, Math.PI*2); c.fill();
+        c.beginPath(); c.arc(x+10, y, 8, 0, Math.PI*2); c.fill();
+        c.fillStyle = "black";
+        c.beginPath(); c.arc(x-10, y, 3, 0, Math.PI*2); c.fill();
+        c.beginPath(); c.arc(x+10, y, 3, 0, Math.PI*2); c.fill();
+        // Mouth
+        c.beginPath(); c.arc(x, y+10, 5, 0, Math.PI, false); c.stroke();
+    },
+
+    roundRect(c, x, y, w, h, r) {
+        c.beginPath(); c.roundRect(x,y,w,h,r); c.fill();
+    }
+};
+
+// --- GAME LOGIC ---
+const Game = {
+    party: [], activeMon: null, enemy: null, busy: false,
+    
+    init() {
+        GFX.init();
+        // Starter Team
+        this.party.push(Generator.create(1));
+        this.party.push(Generator.create(1));
+        this.activeMon = this.party[0];
+        
+        this.spawn();
+        setInterval(() => GFX.draw(), 33);
+    },
+
+    spawn() {
+        // Enemy is slightly stronger than player
+        const lvl = this.activeMon.level;
+        this.enemy = Generator.create(lvl);
+        this.busy = false;
+        this.log(`A Wild ${this.enemy.name} appeared!`);
+        this.renderMenu('MAIN');
+        this.updateHUD();
+    },
+
+    // --- MENUS ---
+    renderMenu(type) {
+        const box = document.getElementById('action-box');
+        box.innerHTML = ''; 
+
+        if(type === 'MAIN') {
+            box.innerHTML = `
+                <button class="btn btn-fight" style="background:#d32f2f" onclick="Game.renderMenu('MOVES')">FIGHT</button>
+                <button class="btn" style="background:#1976d2" onclick="Game.renderMenu('SWITCH')">SWITCH</button>
+                <button class="btn" style="background:#f57c00" onclick="Game.actCatch()">CATCH</button>
+                <button class="btn" style="background:#388e3c" onclick="Game.actRun()">RUN</button>
+            `;
+        } 
+        else if(type === 'MOVES') {
+            this.activeMon.moves.forEach(m => {
+                const btn = document.createElement('button');
+                btn.className = m.type === 'stat' ? 'btn type-stat' : 'btn type-phys';
+                btn.innerText = m.name;
+                btn.onclick = () => Game.actAttack(m);
+                box.appendChild(btn);
+            });
+            const back = document.createElement('button');
+            back.className = 'btn'; back.innerText = 'BACK'; back.style.background = '#333';
+            back.onclick = () => this.renderMenu('MAIN');
+            box.appendChild(back);
+        }
+        else if(type === 'SWITCH') {
+            this.party.forEach((mon, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.style.textAlign = 'left';
+                btn.innerHTML = `<b>${mon.name}</b> <small>Lv.${mon.level}</small>`;
+                if(mon === this.activeMon || mon.hp <= 0) btn.disabled = true;
+                else btn.onclick = () => Game.actSwitch(idx);
+                box.appendChild(btn);
+            });
+            const back = document.createElement('button');
+            back.className = 'btn'; back.innerText = 'BACK'; back.style.background = '#333';
+            back.onclick = () => this.renderMenu('MAIN');
+            box.appendChild(back);
+        }
+    },
+
+    // --- ACTIONS ---
+    actAttack(move) {
+        if(this.busy) return;
+        this.busy = true;
+        
+        this.log(`${this.activeMon.name} used ${move.name}! ${move.desc}`);
+
+        setTimeout(() => {
+            if(Math.random() > move.acc) {
+                this.log("But it missed!");
+                this.endTurn();
+            } else {
+                let dmg = move.pwr * (this.activeMon.level * 0.5) + (Math.random()*10);
+                if(move.pwr === 0) dmg = 0; // Status move
+
+                this.enemy.hp -= Math.floor(dmg);
+                this.updateHUD();
+                
+                // Hit Animation Shake
+                document.getElementById('game-canvas').style.transform = "translate(5px, 5px)";
+                setTimeout(()=>document.getElementById('game-canvas').style.transform = "none", 100);
+
+                if(this.enemy.hp <= 0) {
+                    this.enemy.hp = 0;
+                    this.log("Enemy Fainted!");
+                    this.gainXp();
+                } else {
+                    this.endTurn();
+                }
+            }
+        }, 1000);
+    },
+
+    gainXp() {
+        const xpGain = this.enemy.level * 40;
+        this.activeMon.xp += xpGain;
+        this.log(`Won! Gained ${xpGain} XP.`);
+        
+        // Level Up Check
+        if(this.activeMon.xp >= this.activeMon.maxXp) {
+            this.activeMon.level++;
+            this.activeMon.xp = 0;
+            this.activeMon.maxXp *= 1.5;
+            this.activeMon.maxHp += 20;
+            this.activeMon.hp = this.activeMon.maxHp;
+            
+            setTimeout(() => {
+                this.log(`${this.activeMon.name} grew to Level ${this.activeMon.level}!`);
+                
+                // Evolution Check
+                if(Generator.evolve(this.activeMon)) {
+                    setTimeout(() => {
+                        this.log(`Wait... ${this.activeMon.name} is evolving!`);
+                        document.body.classList.add('evolving');
+                        setTimeout(() => document.body.classList.remove('evolving'), 1000);
+                    }, 1000);
+                }
+                setTimeout(() => this.spawn(), 3000);
+            }, 1000);
+        } else {
+            setTimeout(() => this.spawn(), 2000);
+        }
+        this.updateHUD();
+    },
+
+    actSwitch(idx) {
+        if(this.busy) return;
+        this.busy = true;
+        this.log(`Go ${this.party[idx].name}!`);
+        setTimeout(() => {
+            this.activeMon = this.party[idx];
+            this.updateHUD();
+            this.renderMenu('MAIN');
+            this.endTurn();
+        }, 1000);
+    },
+
+    actCatch() {
+        if(this.busy) return;
+        this.busy = true;
+        this.log("Threw a Trap!");
+        setTimeout(() => {
+            if(Math.random() < ((this.enemy.maxHp - this.enemy.hp)/this.enemy.maxHp) + 0.2) {
+                this.log(`Caught ${this.enemy.name}! Added to team.`);
+                this.enemy.hp = this.enemy.maxHp; // Heal
+                this.party.push(this.enemy);
+                setTimeout(() => this.spawn(), 1500);
+            } else {
+                this.log("It broke free!");
+                this.endTurn();
+            }
+        }, 1000);
+    },
+
+    actRun() {
+        this.busy = true;
+        this.log("Ran away safely.");
+        setTimeout(() => this.spawn(), 1000);
+    },
+
+    endTurn() {
+        setTimeout(() => {
+            if(this.enemy.hp > 0) this.enemyTurn();
+        }, 1000);
+    },
+
+    enemyTurn() {
+        const move = this.enemy.moves[Math.floor(Math.random()*this.enemy.moves.length)];
+        this.log(`Enemy used ${move.name}! ${move.desc}`);
+        setTimeout(() => {
+            if(Math.random() > move.acc) {
+                this.log("Enemy missed!");
+            } else {
+                let dmg = move.pwr * (this.enemy.level * 0.4) + 5;
+                if(move.pwr===0) dmg=0;
+                this.activeMon.hp -= Math.floor(dmg);
+                this.updateHUD();
+            }
+
+            this.busy = false;
+            if(this.activeMon.hp <= 0) {
+                this.log("Your monster fainted!");
+                if(this.party.some(m => m.hp > 0)) {
+                    this.renderMenu('SWITCH');
+                } else {
+                    this.log("GAME OVER.");
+                    setTimeout(() => location.reload(), 2000);
+                }
+            } else {
+                this.renderMenu('MAIN');
+            }
+        }, 1000);
+    },
+
+    log(msg) { document.getElementById('battle-log').innerText = msg; },
+
+    updateHUD() {
+        // Enemy
+        const ep = Math.max(0, (this.enemy.hp / this.enemy.maxHp)*100);
+        document.getElementById('e-hp').style.width = ep + '%';
+        document.getElementById('e-name').innerText = this.enemy.name;
+        document.getElementById('e-lvl').innerText = 'Lv.' + this.enemy.level;
+
+        // Player
+        const pp = Math.max(0, (this.activeMon.hp / this.activeMon.maxHp)*100);
+        document.getElementById('p-hp').style.width = pp + '%';
+        document.getElementById('p-hp-text').innerText = `${Math.floor(this.activeMon.hp)}/${this.activeMon.maxHp}`;
+        document.getElementById('p-name').innerText = this.activeMon.name;
+        document.getElementById('p-lvl').innerText = 'Lv.' + this.activeMon.level;
+        
+        // XP Bar
+        const xp = Math.max(0, (this.activeMon.xp / this.activeMon.maxXp)*100);
+        document.getElementById('p-xp').style.width = xp + '%';
+    }
+};
+
+window.onload = () => Game.init();
+</script>
+</body>
+</html>
