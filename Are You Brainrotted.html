@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Are You Brainrotted?</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+
+        #quiz-container {
+            background-color: #1e1e1e;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 650px;
+            width: 100%;
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.5);
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            color: #bb86fc;
+            margin-bottom: 5px;
+            flex-shrink: 0;
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #cf6679;
+            flex-shrink: 0;
+        }
+
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .option-btn {
+            background-color: #333333;
+            color: white;
+            border: 2px solid #bb86fc;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+
+        .option-btn:hover:not(:disabled) {
+            background-color: #bb86fc;
+            color: #121212;
+            font-weight: bold;
+        }
+
+        .option-btn:disabled {
+            cursor: default;
+            opacity: 0.8;
+        }
+
+        /* Feedback Colors */
+        .option-btn.correct {
+            background-color: #03dac6 !important;
+            border-color: #03dac6 !important;
+            color: #121212 !important;
+            font-weight: bold;
+        }
+
+        .option-btn.wrong {
+            background-color: #cf6679 !important;
+            border-color: #cf6679 !important;
+            color: white !important;
+        }
+
+        #feedback-area {
+            margin-top: 20px;
+            min-height: 60px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #feedback-text {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        #next-btn, #restart-btn {
+            background-color: #bb86fc;
+            color: #121212;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: none;
+        }
+
+        #next-btn:hover, #restart-btn:hover {
+            background-color: #9965f4;
+        }
+
+        #result-container {
+            display: none;
+            overflow-y: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .percentage {
+            font-size: 3.5rem;
+            font-weight: bold;
+            color: #03dac6;
+            margin: 10px 0;
+            flex-shrink: 0;
+        }
+
+        .comment {
+            font-size: 1.3rem;
+            font-style: italic;
+            margin-bottom: 20px;
+            flex-shrink: 0;
+        }
+
+        /* Scrollable Review Section */
+        #review-section {
+            text-align: left;
+            overflow-y: auto;
+            flex-grow: 1;
+            padding-right: 10px;
+            margin-bottom: 20px;
+            border-top: 1px solid #333;
+            padding-top: 15px;
+        }
+
+        .review-item {
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .review-question {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #bb86fc;
+        }
+
+        .review-answer {
+            font-size: 0.9rem;
+            margin-top: 3px;
+        }
+
+        .text-green { color: #03dac6; }
+        .text-red { color: #cf6679; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e1e1e; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #bb86fc; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9965f4; 
+        }
+    </style>
+</head>
+<body>
+
+    <div id="quiz-container">
+        <div id="question-screen">
+            <h1>Are You Brainrotted?</h1>
+            <h2 id="question-text">Loading question...</h2>
+            
+            <div class="options" id="options-container">
+                </div>
+
+            <div id="feedback-area">
+                <div id="feedback-text"></div>
+                <button id="next-btn" onclick="nextQuestion()">Next Question</button>
+            </div>
+        </div>
+
+        <div id="result-container" style="display: none;">
+            <h1>Diagnosis Complete</h1>
+            <div class="percentage" id="percentage-text">0%</div>
+            <div id="brainrot-statement" style="font-size: 1.2rem; margin-bottom: 10px;">You are 0% brainrotted.</div>
+            <div class="comment" id="comment-text">...</div>
+            
+            <div id="review-section">
+                </div>
+
+            <button id="restart-btn" style="display: inline-block; flex-shrink: 0;" onclick="startQuiz()">Take the Quiz Again</button>
+        </div>
+    </div>
+
+    <script>
+        // The Massive Steal A Brainrot & Gen Alpha Bank
+        const allQuestions = [
+            { question: "What are the lyrics to the singing Chicken Nugget?", options: ["Chipi Chipi Chapa Chapa", "Gegagedigedagedago", "Dubidubidu", "Pedro Pedro Pedro"], answer: 1 },
+            { question: "What is Maxwell?", options: ["A spinning black and white cat", "A dog that barks at the wall", "A block of cheese", "A Skibidi toilet"], answer: 0 },
+            { question: "What song does the Smurf Cat walk to?", options: ["Never Gonna Give You Up", "We Live, We Love, We Lie (The Spectre)", "Phonk music", "Skibidi Bop Yes Yes"], answer: 1 },
+            { question: "Who says 'Yep, you're banned'?", options: ["IShowSpeed", "Kai Cenat", "CaseOh", "John Pork"], answer: 2 },
+            { question: "What animal spins in a circle to the song 'Pedro Pedro Pedro'?", options: ["A cat", "A raccoon", "A dog", "A hamster"], answer: 1 },
+            { question: "What does the 'Huh' cat do?", options: ["Screams loudly", "Dances to phonk", "Stares blankly and says 'Huh?'", "Eats crunchy food"], answer: 2 },
+            { question: "What creature is literally just a fruit mixed with an animal?", options: ["Strawberry Elephant", "Apple Dog", "Banana Cat", "Both A and C"], answer: 3 },
+            { question: "What is the tax collected in Ohio?", options: ["Sigma Tax", "Fanum Tax", "Skibidi Tax", "Gyatt Tax"], answer: 1 },
+            { question: "Finish the phrase: 'Erm, what the ____'", options: ["Dog doin", "Sigma", "Skibidi", "Sahur"], answer: 1 },
+            { question: "What do you do to improve your jawline and protect your aura?", options: ["Sium", "Mewing", "Yapping", "Eating gabagool"], answer: 1 },
+            { question: "Who famously 'rizzed up' Livvy Dunne?", options: ["Baby Gronk", "Kai Cenat", "IShowSpeed", "John Pork"], answer: 0 },
+            { question: "If you have negative Aura, you are...", options: ["A sigma", "Cooked", "Glowing", "Winning"], answer: 1 },
+            { question: "What does it mean to 'Mog' someone?", options: ["To steal their food", "To look significantly better than them", "To block them on TikTok", "To laugh at them"], answer: 1 },
+            { question: "What happens if you drink the Grimace Shake?", options: ["You gain aura", "You pass out in a purple puddle", "You become a Sigma", "You start mewing"], answer: 1 },
+            { question: "Who is John Pork?", options: ["A Minecraft character", "An AI-generated pig man who calls you", "A famous chef", "A Roblox admin"], answer: 1 },
+            { question: "Who are the sworn enemies of the Skibidi Toilets?", options: ["The Camera, Speaker, and TV Men", "The Roblox Noobs", "The Smurf Cats", "The Sigma Males"], answer: 0 },
+            { question: "What does 'Gyatt' usually mean?", options: ["Being scared", "An exclamation for seeing someone with a large behind", "Sneezing", "Winning a game"], answer: 1 },
+            { question: "Finish the meme: '1, 2, Buckle my...'", options: ["Shoe", "Belt", "Brain", "Rizz"], answer: 0 },
+            { question: "If someone is 'Yapping', they are...", options: ["Sleeping", "Talking way too much about nothing", "Running fast", "Crying"], answer: 1 },
+            { question: "What is 'Brainrot'?", options: ["A medical condition", "Content that rots your attention span with absurd internet slang", "A zombie movie", "A type of cheese"], answer: 1 },
+            { question: "What does 'Zesty' mean in internet slang?", options: ["Sour", "Acting a bit eccentric, flamboyant, or fruity", "Angry", "Tired"], answer: 1 },
+            { question: "What sound does the Plink cat make?", options: ["Meow", "Plink", "Huh?", "Chipi Chipi"], answer: 1 },
+            { question: "Who walks aggressively to Phonk music with a massive grin on his face?", options: ["Dr. Livesey", "GigaChad", "CaseOh", "John Pork"], answer: 0 },
+            { question: "What does Quandale Dingle have?", options: ["A very long nose and goofy ahh sounds", "A Skibidi toilet", "A strawberry elephant", "A huge gyatt"], answer: 0 },
+            { question: "What does it mean if someone is 'Looksmaxxing'?", options: ["Staring at a screen", "Maximizing their physical appearance", "Playing Minecraft", "Losing aura"], answer: 1 },
+            { question: "What does 'NPC' mean as an insult?", options: ["No Pizza Crust", "Someone who acts like a boring, programmed background character", "Nice Person Card", "Nerd Playing Computer"], answer: 1 },
+            { question: "What song does the bouncing cat sing?", options: ["Chipi Chipi Chapa Chapa", "Gegagedigedagedago", "Happy Happy Happy", "Never Gonna Give You Up"], answer: 0 },
+            { question: "What does the Happy Happy Happy cat do?", options: ["Cries", "Jumps behind a glass door", "Spins in a circle", "Eats a chicken nugget"], answer: 1 },
+            { question: "What is 'Bussin'?", options: ["A school bus", "Something that tastes really good", "A TikTok dance", "A type of shoe"], answer: 1 },
+            { question: "If someone is 'Delulu', they are...", options: ["Delicious", "Delusional", "Depressed", "Delighted"], answer: 1 },
+            { question: "What is a 'Pookie'?", options: ["A scary monster", "An affectionate nickname for someone cute", "A type of tax", "A bad haircut"], answer: 1 },
+            { question: "What does 'Bet' mean?", options: ["I disagree", "Maybe", "Yes / I agree", "I am gambling"], answer: 2 },
+            { question: "Who is the ultimate Chad?", options: ["Beta Male", "GigaChad", "John Pork", "Smurf Cat"], answer: 1 },
+            { question: "What is the 'Apple Dance'?", options: ["Dancing to the song Apple by Charli XCX", "Eating an apple", "Throwing an apple", "A Minecraft emote"], answer: 0 },
+            { question: "What does 'Cap' mean?", options: ["A hat", "Truth", "A lie", "Money"], answer: 2 },
+            { question: "If a situation is 'Sus', it means it is...", options: ["Sustainable", "Suspicious", "Super", "Silly"], answer: 1 },
+            { question: "What does someone have if they are effortlessly good at flirting?", options: ["W Rizz", "L Aura", "Mewing streak", "Goofy Ahh"], answer: 0 },
+            { question: "What is the viral sound 'Oiaia' associated with?", options: ["A spinning cat", "A dog barking", "A chicken nugget", "A spinning strawberry elephant"], answer: 0 },
+            { question: "What does Luna the Crunchy Cat do?", options: ["Spins", "Eats dry food very loudly", "Sings Chipi Chipi", "Blinks"], answer: 1 },
+            { question: "If you tell someone to 'Let him cook', you mean...", options: ["Give him time to do his thing", "He needs to make dinner", "He is in trouble", "Turn up the heat"], answer: 0 },
+            { question: "What is 'Glazing'?", options: ["Making donuts", "Over-praising and hyping someone up too much", "Staring out a window", "Winning a game"], answer: 1 },
+            { question: "Who is the 'Rizzler'?", options: ["Someone with immense rizz", "A Batman villain", "A type of Skibidi toilet", "A bad dancer"], answer: 0 },
+            { question: "What does 'Fanum Tax' specifically refer to?", options: ["Taxes in Ohio", "Paying Roblox Robux", "Stealing a piece of your friend's food", "Losing aura"], answer: 2 },
+            { question: "What does 'Cooked' mean?", options: ["Doomed, finished, or out of luck", "Ready to eat", "Winning", "Sleeping"], answer: 0 },
+            { question: "What are the 'Backrooms'?", options: ["An endless maze of creepy liminal office spaces", "Where YouTubers record", "A Roblox lobby", "The inside of a Skibidi Toilet"], answer: 0 },
+            { question: "What does 'Aura points' mean?", options: ["Points in Minecraft", "Points for how cool, intimidating, or successful you are", "Money", "Math homework"], answer: 1 },
+            { question: "What is the 'Bite of 87'?", options: ["A eating contest", "A famous Five Nights at Freddy's meme", "A dog meme", "When CaseOh eats"], answer: 1 },
+            { question: "What does 'Ratio' mean on social media?", options: ["Math class", "Getting more likes on your reply than the original post", "Being ignored", "Losing followers"], answer: 1 },
+            { question: "Where is Pomni from?", options: ["Garten of Banban", "The Amazing Digital Circus", "Five Nights at Freddy's", "Roblox"], answer: 1 },
+            { question: "What is 'Domain Expansion'?", options: ["Building a house", "An ultimate anime move from JJK heavily memed on TikTok", "A Minecraft update", "A math term"], answer: 1 },
+            { question: "Who famously said 'Nah, I'd win'?", options: ["Satoru Gojo", "CaseOh", "IShowSpeed", "John Pork"], answer: 0 },
+            { question: "What is 'Canthal tilt'?", options: ["A dance move", "The angle of your eyes in Looksmaxxing lore", "A skateboarding trick", "A camera angle"], answer: 1 },
+            { question: "What does 'Unspoken Rizz' mean?", options: ["Attracting people without even saying a word", "Talking too much", "Being loud", "Being invisible"], answer: 0 },
+            { question: "Who is Duke Dennis?", options: ["A streamer famous for his 'unspoken rizz'", "A Minecraft YouTuber", "The creator of Skibidi Toilet", "A cat"], answer: 0 },
+            { question: "What is 'Garten of Banban' known for?", options: ["Being a beautiful masterpiece", "Being a notoriously low-quality mascot horror game", "Being a racing game", "Being a cartoon"], answer: 1 },
+            { question: "What does it mean to be a 'Tryhard'?", options: ["Trying new foods", "Being lazy", "Sweating and trying way too hard at a casual game", "Studying for a test"], answer: 2 },
+            { question: "What does 'W' and 'L' stand for?", options: ["Win and Loss", "Water and Land", "Walk and Leap", "Wait and Listen"], answer: 0 },
+            { question: "If you 'Fumbled', what did you do?", options: ["Dropped a football", "Ruined a really good opportunity or relationship", "Won the game", "Went to sleep"], answer: 1 },
+            { question: "What is 'Brain Nourishment'?", options: ["Eating broccoli", "The opposite of Brainrot (wholesome/educational content)", "A new energy drink", "A TikTok trend"], answer: 1 },
+            { question: "What is a 'Sweat' in gaming?", options: ["A broken controller", "Someone who plays so intensely they are virtually sweating", "A hot room", "A rare skin"], answer: 1 },
+            { question: "What does 'Touch Grass' mean?", options: ["A gardening tip", "Go outside and disconnect from the internet", "Play soccer", "Eat a salad"], answer: 1 }
+        ];
+
+        let currentQuestions = [];
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let userAnswers = []; // To track what they got right/wrong
+        
+        // --- 25 questions per round ---
+        const questionsPerQuiz = 25; 
+
+        const questionText = document.getElementById("question-text");
+        const optionsContainer = document.getElementById("options-container");
+        const questionScreen = document.getElementById("question-screen");
+        const resultContainer = document.getElementById("result-container");
+        const percentageText = document.getElementById("percentage-text");
+        const brainrotStatement = document.getElementById("brainrot-statement");
+        const commentText = document.getElementById("comment-text");
+        const reviewSection = document.getElementById("review-section");
+        
+        const feedbackArea = document.getElementById("feedback-area");
+        const feedbackText = document.getElementById("feedback-text");
+        const nextBtn = document.getElementById("next-btn");
+
+        // Shuffle utility
+        function shuffle(array) {
+            return array.sort(() => Math.random() - 0.5);
+        }
+
+        function startQuiz() {
+            score = 0;
+            currentQuestionIndex = 0;
+            userAnswers = [];
+            
+            resultContainer.style.display = "none";
+            questionScreen.style.display = "block";
+
+            // Shuffle all questions, slice out 25
+            const shuffled = shuffle([...allQuestions]);
+            currentQuestions = shuffled.slice(0, questionsPerQuiz);
+
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            // Reset UI for new question
+            feedbackText.innerText = "";
+            nextBtn.style.display = "none";
+            optionsContainer.innerHTML = ""; 
+
+            const currentQ = currentQuestions[currentQuestionIndex];
+            questionText.innerText = `Question ${currentQuestionIndex + 1} of ${questionsPerQuiz}:\n\n${currentQ.question}`;
+            
+            currentQ.options.forEach((option, index) => {
+                const btn = document.createElement("button");
+                btn.classList.add("option-btn");
+                btn.innerText = option;
+                btn.onclick = () => selectAnswer(index, btn);
+                optionsContainer.appendChild(btn);
+            });
+        }
+
+        function selectAnswer(selectedIndex, clickedBtn) {
+            const currentQ = currentQuestions[currentQuestionIndex];
+            const isCorrect = (selectedIndex === currentQ.answer);
+            const buttons = document.querySelectorAll(".option-btn");
+            
+            // Disable all buttons so they can't change their answer
+            buttons.forEach(btn => btn.disabled = true);
+
+            // Record the answer for the review screen
+            userAnswers.push({
+                question: currentQ.question,
+                selectedText: currentQ.options[selectedIndex],
+                correctText: currentQ.options[currentQ.answer],
+                isCorrect: isCorrect
+            });
+
+            if (isCorrect) {
+                score++;
+                clickedBtn.classList.add("correct");
+                feedbackText.innerText = "✅ Correct! +1000 Aura";
+                feedbackText.style.color = "#03dac6";
+            } else {
+                clickedBtn.classList.add("wrong");
+                // Highlight the correct one
+                buttons[currentQ.answer].classList.add("correct");
+                feedbackText.innerText = "❌ Wrong! You're cooked. -1000 Aura";
+                feedbackText.style.color = "#cf6679";
+            }
+
+            // Show next button
+            nextBtn.style.display = "block";
+        }
+
+        function nextQuestion() {
+            currentQuestionIndex++;
+
+            if (currentQuestionIndex < questionsPerQuiz) {
+                loadQuestion();
+            } else {
+                showResults();
+            }
+        }
+
+        function showResults() {
+            questionScreen.style.display = "none";
+            resultContainer.style.display = "flex";
+
+            // Calculate percentage
+            const percentage = Math.round((score / questionsPerQuiz) * 100);
+            
+            percentageText.innerText = `${percentage}%`;
+            brainrotStatement.innerText = `You are ${percentage}% brainrotted.`;
+
+            // Dynamic Feedback
+            if (percentage >= 80) {
+                commentText.innerText = "Please log off Roblox and go see a therapist immediately.";
+                commentText.style.color = "#cf6679"; // Red
+            } else if (percentage >= 40) {
+                commentText.innerText = "You are chronically online. Go touch some grass.";
+                commentText.style.color = "#ffeb3b"; // Yellow
+            } else {
+                commentText.innerText = "You are safe and sane. Protect your peace.";
+                commentText.style.color = "#03dac6"; // Green
+            }
+
+            // Generate Review List
+            reviewSection.innerHTML = "<h3>Your Report Card:</h3>";
+            userAnswers.forEach((ans, index) => {
+                const item = document.createElement("div");
+                item.classList.add("review-item");
+                
+                let resultHTML = `<div class="review-question">${index + 1}. ${ans.question}</div>`;
+                
+                if (ans.isCorrect) {
+                    resultHTML += `<div class="review-answer text-green">✅ You answered: ${ans.selectedText}</div>`;
+                } else {
+                    resultHTML += `<div class="review-answer text-red">❌ You answered: ${ans.selectedText}</div>`;
+                    resultHTML += `<div class="review-answer text-green">💡 Correct answer: ${ans.correctText}</div>`;
+                }
+
+                item.innerHTML = resultHTML;
+                reviewSection.appendChild(item);
+            });
+        }
+
+        // Initialize quiz on load
+        startQuiz();
+    </script>
+</body>
+</html>

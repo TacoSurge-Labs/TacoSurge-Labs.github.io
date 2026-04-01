@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unintelligent Peeps</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background: radial-gradient(circle at center, #1b327b 0%, #060b1c 100%);
+            color: #ffffff;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            transition: background 0.5s;
+        }
+        
+        body.sudden-death-bg { background: radial-gradient(circle at center, #7b1b1b 0%, #1c0606 100%); }
+
+        #game-container {
+            background-color: rgba(6, 11, 28, 0.85);
+            width: 100%;
+            max-width: 700px;
+            padding: 40px 30px;
+            border-radius: 20px;
+            border: 4px solid #f1c40f;
+            box-shadow: 0 0 30px rgba(241, 196, 15, 0.3), inset 0 0 20px rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px);
+            position: relative;
+            transition: border-color 0.5s, box-shadow 0.5s;
+        }
+
+        .sudden-death-bg #game-container {
+            border-color: #ff4757;
+            box-shadow: 0 0 40px rgba(255, 71, 87, 0.5), inset 0 0 20px rgba(0,0,0,0.8);
+        }
+        
+        h1 { 
+            color: #f1c40f; font-size: 2.8em; margin: 0 0 15px 0; font-weight: 900; letter-spacing: 2px; text-transform: uppercase;
+            text-shadow: 0 0 15px rgba(241, 196, 15, 0.6), 2px 2px 0px #000; display: flex; align-items: center; justify-content: center; gap: 15px; 
+        }
+        
+        .sudden-death-bg h1 { color: #ff4757; text-shadow: 0 0 15px rgba(255, 71, 87, 0.6), 2px 2px 0px #000; }
+        .title-icon { width: 65px; height: auto; border-radius: 50%; border: 3px solid #f1c40f; box-shadow: 0 0 10px #f1c40f; }
+        .sudden-death-bg .title-icon { border-color: #ff4757; box-shadow: 0 0 10px #ff4757; }
+
+        h2 { color: #00d2d3; margin-top: 0; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px rgba(0, 210, 211, 0.5);}
+        .hidden { display: none !important; }
+        
+        .setup-headers { display: flex; justify-content: space-between; align-items: center; padding: 0 10px; font-size: 0.9em; font-weight: bold; color: #8395a7; margin-bottom: 5px; text-transform: uppercase; }
+        .player-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0; background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.05) 100%); padding: 10px 15px; border-radius: 12px; border: 2px solid #00d2d3; box-shadow: inset 0 0 10px rgba(0, 210, 211, 0.2); }
+        .judge-radio { cursor: pointer; transform: scale(1.4); margin-right: 5px; accent-color: #f1c40f;}
+        
+        /* 3D Avatar Container Styles */
+        .avatar-preview { 
+            background-color: #ffffff; background-size: 85%; background-repeat: no-repeat; background-position: center; 
+            border-radius: 50%; width: 55px; height: 55px; border: 3px solid #f1c40f; cursor: pointer; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5), inset 0 -4px 6px rgba(0,0,0,0.2); transition: transform 0.2s, box-shadow 0.2s; 
+        }
+        .avatar-preview:hover { transform: scale(1.1) translateY(-2px); box-shadow: 0 8px 20px rgba(241, 196, 15, 0.6), inset 0 -4px 6px rgba(0,0,0,0.2); }
+        .avatar-preview:active { transform: scale(0.95); box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+
+        input[type="text"] { width: 45%; padding: 12px; background: rgba(0, 0, 0, 0.4); color: #fff; border: 2px solid #8395a7; border-radius: 8px; font-size: 16px; font-family: 'Montserrat', sans-serif; font-weight: bold; outline: none; transition: all 0.2s; }
+        input[type="text"]:focus { border-color: #f1c40f; box-shadow: 0 0 10px rgba(241, 196, 15, 0.5); }
+        input[type="text"]::placeholder { color: #8395a7; font-weight: 500;}
+        
+        .cpu-toggle { display: flex; align-items: center; gap: 5px; font-weight: 800; color: #00d2d3; cursor: pointer; width: 65px; }
+        .cpu-toggle input { width: 18px; height: 18px; cursor: pointer; accent-color: #00d2d3;}
+
+        .custom-prompts-section { margin-top: 25px; padding-top: 20px; border-top: 2px dashed #8395a7; }
+        .custom-prompt-input-row { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
+        #custom-prompts-list { font-size: 0.9em; color: #f1c40f; text-align: left; max-height: 100px; overflow-y: auto; margin: 10px auto; width: 90%; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; }
+
+        button { background: linear-gradient(180deg, #f1c40f 0%, #e67e22 100%); color: #fff; border: 2px solid #fff; padding: 15px 30px; margin: 15px 5px; font-size: 18px; font-weight: 900; border-radius: 50px; cursor: pointer; transition: all 0.1s ease; box-shadow: 0 6px 0 #a04000, 0 10px 15px rgba(0,0,0,0.5); text-transform: uppercase; letter-spacing: 1px; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
+        button:hover { transform: translateY(2px); box-shadow: 0 4px 0 #a04000, 0 8px 10px rgba(0,0,0,0.5); filter: brightness(1.1);}
+        button:active { transform: translateY(6px); box-shadow: 0 0 0 #a04000; }
+        
+        .alt-button { background: linear-gradient(180deg, #00d2d3 0%, #0097e6 100%); box-shadow: 0 6px 0 #005f9e, 0 10px 15px rgba(0,0,0,0.5); }
+        .alt-button:hover { box-shadow: 0 4px 0 #005f9e, 0 8px 10px rgba(0,0,0,0.5); }
+        .alt-button:active { box-shadow: 0 0 0 #005f9e; }
+
+        .tie-button { background: linear-gradient(180deg, #9b59b6 0%, #8e44ad 100%); box-shadow: 0 6px 0 #5b2c6f, 0 10px 15px rgba(0,0,0,0.5); }
+        .tie-button:hover { box-shadow: 0 4px 0 #5b2c6f, 0 8px 10px rgba(0,0,0,0.5); }
+        .tie-button:active { box-shadow: 0 0 0 #5b2c6f; }
+        
+        .prompt-text { font-size: 1.6em; font-weight: 900; background: linear-gradient(135deg, #1e3799 0%, #0c2461 100%); color: #ffffff; padding: 30px; border-radius: 12px; margin: 25px 0; border: 4px solid #f1c40f; box-shadow: 0 0 20px rgba(241, 196, 15, 0.4), inset 0 0 15px rgba(0,0,0,0.5); position: relative; text-transform: uppercase; }
+        .sudden-death-bg .prompt-text { border-color: #ff4757; box-shadow: 0 0 20px rgba(255, 71, 87, 0.4), inset 0 0 15px rgba(0,0,0,0.5); }
+
+        .answer-card { background: linear-gradient(180deg, #ffffff 0%, #dfe6e9 100%); color: #2d3436; padding: 20px; margin: 16px auto; border-radius: 8px; font-size: 1.4em; font-weight: 900; cursor: pointer; border: 4px solid #b2bec3; box-shadow: 0 6px 0 #636e72, 0 10px 15px rgba(0,0,0,0.3); transition: all 0.1s ease; width: 90%; text-transform: uppercase; }
+        .answer-card:hover { transform: translateY(2px); border-color: #f1c40f; box-shadow: 0 4px 0 #e1b12c, 0 8px 10px rgba(0,0,0,0.3); background: linear-gradient(180deg, #fff 0%, #ffeaa7 100%);}
+        .answer-card:active { transform: translateY(6px); box-shadow: 0 0 0 #e1b12c; }
+        .answer-card.disabled { pointer-events: none; opacity: 0.9; }
+        .answer-card.selected-tie { border-color: #9b59b6; background: linear-gradient(180deg, #fff 0%, #e8daef 100%); box-shadow: 0 4px 0 #5b2c6f; transform: translateY(2px); }
+        
+        .scoreboard { text-align: left; margin-top: 25px; background: rgba(0,0,0,0.5); padding: 20px; border-radius: 12px; border: 2px solid #00d2d3; box-shadow: inset 0 0 15px rgba(0,0,0,0.8);}
+        .error { color: #ff7675; font-weight: bold; margin: 10px 0; background: rgba(255, 118, 117, 0.2); padding: 10px; border-radius: 8px; border: 1px solid #ff7675;}
+
+        .emoji-bar { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 15px; }
+        .emoji-btn { background: rgba(255,255,255,0.1); border: 2px solid #8395a7; font-size: 24px; padding: 10px; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 0 #485460; transition: all 0.1s; margin: 0; }
+        .emoji-btn:hover { background: rgba(255,255,255,0.2); transform: translateY(2px); box-shadow: 0 2px 0 #485460; }
+        .emoji-btn:active { transform: translateY(4px); box-shadow: none; }
+
+        .steal-container { margin-top: 15px; background: rgba(0,0,0,0.4); padding: 15px; border-radius: 12px; border: 2px solid #f1c40f; }
+        .steal-toggle { cursor: pointer; color: #f1c40f; font-weight: 900; font-size: 1.1em; display: flex; align-items: center; justify-content: center; gap: 10px;}
+        .steal-toggle input { width: 22px; height: 22px; accent-color: #f1c40f; cursor: pointer; }
+
+        .sfx-bar { display: flex; justify-content: center; gap: 10px; margin-top: 30px; padding-top: 20px; border-top: 2px dashed #8395a7; flex-wrap: wrap;}
+        .sfx-btn { background: linear-gradient(180deg, #ff7675 0%, #d63031 100%); font-size: 14px; padding: 12px 18px; margin: 0; box-shadow: 0 6px 0 #b33939; }
+        .sfx-btn:hover { box-shadow: 0 4px 0 #b33939; }
+        
+        .thinking { font-style: italic; color: #f1c40f; margin: 20px 0; font-size: 1.2em; font-weight: 800; animation: pulse 1s infinite; text-shadow: 0 0 5px #f1c40f;}
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+
+        .player-badge { display: inline-flex; align-items: center; justify-content: center; background: #00d2d3; color: #000; padding: 8px 20px; border-radius: 50px; font-weight: 900; font-size: 1.2em; box-shadow: 0 4px 0 #0097e6; margin-bottom: 10px; text-transform: uppercase; border: 2px solid #fff;}
+        .player-badge .badge-avatar { width: 40px; height: 40px; border-radius: 50%; background-size: cover; background-position: center; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; background-color: #fff; border: 2px solid #000;}
+
+        .sudden-death-alert { color: #ff4757; font-size: 2em; font-weight: 900; text-shadow: 0 0 15px rgba(255, 71, 87, 0.8); margin-bottom: 15px; text-transform: uppercase; animation: pulse 0.8s infinite;}
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>
+        <img src="UPIcon.png" alt="Icon" class="title-icon" onerror="this.style.display='none'">
+        Unintelligent Peeps
+    </h1>
+    
+    <div id="setup-screen">
+        <h2>Game Setup</h2>
+        <p style="font-weight: 600; color: #c8d6e5;">First to 5 points wins! Tap the 3D Avatar to upload your own picture.</p>
+        
+        <div class="setup-headers">
+            <span style="width: 10%; text-align: left;">👑</span>
+            <span style="width: 15%; text-align: center;">Pic</span>
+            <span style="width: 45%; text-align: left;">Name</span>
+            <span style="width: 65px;">Bot?</span>
+        </div>
+
+        <input type="file" id="f1" accept="image/*" class="hidden" onchange="handleImageUpload(event, 1)">
+        <input type="file" id="f2" accept="image/*" class="hidden" onchange="handleImageUpload(event, 2)">
+        <input type="file" id="f3" accept="image/*" class="hidden" onchange="handleImageUpload(event, 3)">
+        <input type="file" id="f4" accept="image/*" class="hidden" onchange="handleImageUpload(event, 4)">
+        <input type="file" id="f5" accept="image/*" class="hidden" onchange="handleImageUpload(event, 5)">
+
+        <div class="player-row">
+            <input type="radio" name="startJudge" id="j1" class="judge-radio" checked>
+            <div class="avatar-preview" id="a1" style="background-image: url('https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Zany%20face/3D/zany_face_3d.png');" onclick="if(!document.getElementById('c1').checked) document.getElementById('f1').click()"></div>
+            <input type="text" id="p1" placeholder="Player 1">
+            <label class="cpu-toggle"><input type="checkbox" id="c1" onchange="toggleBotAvatar(1)"> CPU</label>
+        </div>
+        <div class="player-row">
+            <input type="radio" name="startJudge" id="j2" class="judge-radio">
+            <div class="avatar-preview" id="a2" style="background-image: url('https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Smiling%20face%20with%20sunglasses/3D/smiling_face_with_sunglasses_3d.png');" onclick="if(!document.getElementById('c2').checked) document.getElementById('f2').click()"></div>
+            <input type="text" id="p2" placeholder="Player 2">
+            <label class="cpu-toggle"><input type="checkbox" id="c2" onchange="toggleBotAvatar(2)"> CPU</label>
+        </div>
+        <div class="player-row">
+            <input type="radio" name="startJudge" id="j3" class="judge-radio">
+            <div class="avatar-preview" id="a3" style="background-image: url('https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Cowboy%20hat%20face/3D/cowboy_hat_face_3d.png');" onclick="if(!document.getElementById('c3').checked) document.getElementById('f3').click()"></div>
+            <input type="text" id="p3" placeholder="Player 3">
+            <label class="cpu-toggle"><input type="checkbox" id="c3" onchange="toggleBotAvatar(3)"> CPU</label>
+        </div>
+        <div class="player-row">
+            <input type="radio" name="startJudge" id="j4" class="judge-radio">
+            <div class="avatar-preview" id="a4" style="background-image: url('https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Alien/3D/alien_3d.png');" onclick="if(!document.getElementById('c4').checked) document.getElementById('f4').click()"></div>
+            <input type="text" id="p4" placeholder="Player 4 (Opt)">
+            <label class="cpu-toggle"><input type="checkbox" id="c4" onchange="toggleBotAvatar(4)"> CPU</label>
+        </div>
+        <div class="player-row">
+            <input type="radio" name="startJudge" id="j5" class="judge-radio">
+            <div class="avatar-preview" id="a5" style="background-image: url('https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Ghost/3D/ghost_3d.png');" onclick="if(!document.getElementById('c5').checked) document.getElementById('f5').click()"></div>
+            <input type="text" id="p5" placeholder="Player 5 (Opt)">
+            <label class="cpu-toggle"><input type="checkbox" id="c5" onchange="toggleBotAvatar(5)"> CPU</label>
+        </div>
+
+        <div class="custom-prompts-section">
+            <h3 style="color: #f1c40f; margin-top: 0;">Add Custom Prompts</h3>
+            <p style="font-size: 0.8em; color: #c8d6e5; margin-top:-10px;">Use ___ for the blank space. (These play FIRST!)</p>
+            <div class="custom-prompt-input-row">
+                <input type="text" id="custom-prompt-input" style="width: 60%;" placeholder="e.g. My dog ate my ___">
+                <button onclick="addCustomPrompt()" style="padding: 10px 20px; font-size: 14px; margin: 0;">Add</button>
+            </div>
+            <div id="custom-prompts-list"></div>
+        </div>
+
+        <p id="setup-error" class="error hidden">Please enter at least 3 players!</p>
+        <button onclick="startGame()" style="font-size: 1.5em; padding: 20px 50px; width: 100%; max-width: 400px; margin-top: 25px;">Let's Play!</button>
+    </div>
+
+    <div id="pass-screen" class="hidden">
+        <h2>Get Ready!</h2>
+        <div class="player-badge" id="pass-badge"><div class="badge-avatar"></div> <span class="badge-name">Name</span></div>
+        <p style="font-weight: 800; font-size: 1.2em; color: #f1c40f;">Hand the device over!</p>
+        <p style="font-weight: 500; color: #c8d6e5;">Make sure nobody else is looking at the screen.</p>
+        <button class="alt-button" onclick="showSubmissionScreen()">I am ready!</button>
+    </div>
+
+    <div id="submit-screen" class="hidden">
+        <div class="player-badge" id="submit-badge"><div class="badge-avatar"></div> <span class="badge-name">Name</span></div>
+        <div class="prompt-text" id="current-prompt"></div>
+        
+        <div class="emoji-bar">
+            <button class="emoji-btn" onclick="addEmoji('💀')">💀</button>
+            <button class="emoji-btn" onclick="addEmoji('😭')">😭</button>
+            <button class="emoji-btn" onclick="addEmoji('🤡')">🤡</button>
+            <button class="emoji-btn" onclick="addEmoji('👀')">👀</button>
+            <button class="emoji-btn" onclick="addEmoji('🧢')">🧢</button>
+            <button class="emoji-btn" onclick="addEmoji('🔥')">🔥</button>
+            <button class="emoji-btn" onclick="addEmoji('🤓')">🤓</button>
+            <button class="emoji-btn" onclick="addEmoji('✨')">✨</button>
+        </div>
+
+        <input type="text" id="answer-input" autocomplete="off" placeholder="TYPE YOUR ANSWER..." style="width: 90%; padding: 18px; font-size: 1.2em; text-align: center;">
+        
+        <div id="steal-container" class="steal-container hidden">
+            <label class="steal-toggle">
+                <input type="checkbox" id="use-steal"> ⚡ USE STEAL TOKEN
+            </label>
+            <div style="font-size: 0.8em; color: #fff; font-weight: 500; margin-top: 5px;">If you win, steal 1 pt from 1st place! (1 per game)</div>
+        </div>
+        
+        <br>
+        <button onclick="submitAnswer()">Lock It In</button>
+    </div>
+
+    <div id="judge-screen" class="hidden">
+        <h2 style="color: #f1c40f; text-shadow: 0 0 10px #f1c40f;" id="judge-header">👑 Time to Judge 👑</h2>
+        <div class="player-badge" style="background: #f1c40f; color: #000; box-shadow: 0 4px 0 #d35400; border-color: #fff;" id="judge-badge"><div class="badge-avatar"></div> <span class="badge-name">Name</span></div>
+        <p id="judge-instructions" style="font-weight: bold; color: #c8d6e5;">Read the answers out loud and pick the best one!</p>
+        <div class="prompt-text" id="judge-prompt"></div>
+        
+        <div id="cpu-thinking" class="thinking hidden">🤖 CPU is deciding...</div>
+        
+        <div id="answers-container"></div>
+
+        <div class="sfx-bar" id="sfx-bar">
+            <button class="sfx-btn" onclick="playDrumroll()">🥁 Drumroll</button>
+            <button class="sfx-btn" onclick="playBuzzer()">❌ Buzzer</button>
+            <button id="tie-btn" class="tie-button" onclick="activateTieMode()">✌️ Declare Tie</button>
+        </div>
+    </div>
+
+    <div id="results-screen" class="hidden">
+        <div id="sudden-death-alert" class="sudden-death-alert hidden">💀 SUDDEN DEATH ACTIVATED 💀<br><span style="font-size: 0.5em; color: #fff;">Win Target Increased!</span></div>
+        <h2 style="color: #00d2d3; font-size: 2.5em; text-shadow: 0 0 15px #00d2d3;" id="results-title">Winner!</h2>
+        
+        <div id="winners-container"></div> 
+        
+        <p id="winning-sentence" style="font-size: 1.3em; font-weight: 900; background: rgba(0,0,0,0.6); padding: 20px; border-radius: 12px; border: 3px solid #f1c40f; color: #fff; line-height: 1.4;"></p>
+        
+        <p id="steal-alert" style="color: #f1c40f; font-weight: 900; font-size: 1.2em; text-transform: uppercase;" class="hidden"></p>
+
+        <div class="scoreboard" id="scoreboard"></div>
+        <button class="alt-button" onclick="startRound()" style="margin-top: 25px;">Next Round</button>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <h1 style="color: #f1c40f; font-size: 4em; margin-bottom: 0; text-shadow: 0 0 30px #f1c40f;">🏆</h1>
+        <h1 style="color: #fff; margin-top: 0; font-size: 3em;">CHAMPION</h1>
+        <div class="player-badge" id="ultimate-winner-badge" style="background: #f1c40f; font-size: 1.5em; padding: 15px 30px; transform: scale(1.2); margin: 30px 0;"><div class="badge-avatar"></div> <span class="badge-name">Name</span></div>
+        <p id="win-reason-text" style="font-size: 1.4em; font-weight: 800; color: #c8d6e5;">Hit the target score and took the crown!</p>
+        <div class="scoreboard" id="final-scoreboard"></div>
+        <button class="alt-button" onclick="location.reload()" style="font-size: 1.5em; padding: 20px 40px; margin-top: 30px;">Play Again</button>
+    </div>
+</div>
+
+<script>
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx;
+    function initAudio() { if (!audioCtx) audioCtx = new AudioContext(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+    function playTone(freq, type, duration, vol=0.1) {
+        if (!audioCtx) return;
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.type = type; oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(vol, audioCtx.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        oscillator.connect(gainNode); gainNode.connect(audioCtx.destination); oscillator.start(); oscillator.stop(audioCtx.currentTime + duration);
+    }
+    function playDing() { playTone(800, 'sine', 0.5); setTimeout(() => playTone(1200, 'sine', 0.8), 100); }
+    function playBuzzer() { playTone(150, 'sawtooth', 0.6, 0.2); }
+    function playDrumroll() { let time = 0; for(let i = 0; i < 15; i++) { setTimeout(() => playTone(100, 'square', 0.1, 0.3), time); time += 80; } setTimeout(() => playTone(150, 'square', 0.4, 0.4), time + 50); }
+    function playSiren() { playTone(600, 'triangle', 0.5, 0.2); setTimeout(() => playTone(400, 'triangle', 0.5, 0.2), 500); }
+
+    // 3D Avatar Image URLs (Microsoft Fluent Emojis)
+    const humanAvatars3D = [
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Zany%20face/3D/zany_face_3d.png",
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Smiling%20face%20with%20sunglasses/3D/smiling_face_with_sunglasses_3d.png",
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Cowboy%20hat%20face/3D/cowboy_hat_face_3d.png",
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Alien/3D/alien_3d.png",
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Ghost/3D/ghost_3d.png",
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Nerd%20face/3D/nerd_face_3d.png",
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Monkey%20face/3D/monkey_face_3d.png"
+    ];
+    
+    const botAvatars3D = [
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Robot/3D/robot_3d.png",
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Alien%20monster/3D/alien_monster_3d.png",
+        "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Desktop%20computer/3D/desktop_computer_3d.png"
+    ];
+
+    let customPrompts = [];
+
+    // Save default 3D avatar on page load to data-attributes
+    window.onload = () => {
+        document.getElementById('a1').dataset.imgUrl = humanAvatars3D[0];
+        document.getElementById('a2').dataset.imgUrl = humanAvatars3D[1];
+        document.getElementById('a3').dataset.imgUrl = humanAvatars3D[2];
+        document.getElementById('a4').dataset.imgUrl = humanAvatars3D[3];
+        document.getElementById('a5').dataset.imgUrl = humanAvatars3D[4];
+    };
+
+    function handleImageUpload(event, id) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const el = document.getElementById('a' + id);
+                el.style.backgroundImage = `url(${e.target.result})`; 
+                el.dataset.imgUrl = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function toggleBotAvatar(id) {
+        const isBot = document.getElementById('c' + id).checked;
+        const el = document.getElementById('a' + id);
+        if (isBot) {
+            const botPic = botAvatars3D[Math.floor(Math.random() * botAvatars3D.length)];
+            el.style.backgroundImage = `url(${botPic})`; 
+            el.dataset.imgUrl = botPic;
+            el.style.backgroundColor = "#c8d6e5";
+        } else { 
+            const humanPic = humanAvatars3D[Math.floor(Math.random() * humanAvatars3D.length)];
+            el.style.backgroundImage = `url(${humanPic})`;
+            el.dataset.imgUrl = humanPic;
+            el.style.backgroundColor = "#ffffff"; 
+        }
+    }
+
+    function setBadgeAvatar(badgeEl, player) {
+        const avatarDiv = badgeEl.querySelector('.badge-avatar');
+        avatarDiv.style.backgroundImage = `url(${player.imgUrl})`;
+    }
+
+    function addCustomPrompt() {
+        const input = document.getElementById('custom-prompt-input'); const val = input.value.trim();
+        if (val && val.includes('___')) { 
+            customPrompts.push(val); 
+            document.getElementById('custom-prompts-list').innerHTML += `<div>• ${val}</div>`; 
+            input.value = ""; 
+        } 
+        else { alert("Please include '___' (three underscores) where the blank should be!"); }
+    }
+    
+    function addEmoji(emoji) { const input = document.getElementById('answer-input'); input.value += emoji; input.focus(); }
+
+    let players = [];
+    let roundNum = 0;
+    let currentJudgeIndex = 0;
+    let currentSubmitterIndex = 0;
+    let currentPrompt = "";
+    let submittedAnswers = [];
+    let availablePrompts = [];
+    let WINNING_SCORE = 5;
+    
+    // Tiebreaker State
+    let isTieMode = false;
+    let selectedTieAnswers = [];
+
+    const basePrompts = [
+        "I got detention for AirDropping a picture of ___ to my math teacher.", "My teacher hates me because I answered every question with '___'.",
+        "I forgot my homework because I was too busy watching 3 hours of ___ on YouTube.", "I got arrested by the mall security for throwing ___ off the balcony.",
+        "My search history is 90% just me looking up ___.", "I accidentally sent my crush a text about ___.", "The worst thing to happen during a school assembly is ___.",
+        "I got grounded for a week because my parents found ___ under my bed.", "The school Wi-Fi blocks everything except ___.",
+        "My excuse for failing the science test is that I was distracted by ___.", "My parents tried to be cool by talking about ___.",
+        "The weird kid in the back of the class is always eating ___.", "Instead of a fire drill, today we had a ___ drill.",
+        "If I hear one more person talk about ___, I'm going to scream.", "The cafeteria food is officially made of ___.",
+        "The most awkward moment of my life was when I tripped and dropped my ___.", "My locker smells like a combination of Axe body spray and ___.",
+        "Nobody knows this, but the principal is secretly obsessed with ___.", "I ruined the school play by shouting '___' from the audience.",
+        "The new TikTok trend is just kids doing ___ in the bathroom.", "My little brother ruined my life by showing my friends a video of me doing ___.",
+        "I got a virus on the school computer by illegally downloading ___.", "I accidentally unmuted my mic during Zoom and everyone heard ___.",
+        "I failed my driving test because I hit ___.", "I lost all my followers after I posted a terrible take about ___.",
+        "My Halloween costume this year is just a terrifying version of ___.", "I was voted 'Most Likely to Become ___' in the yearbook.",
+        "I accidentally called my teacher 'Mom' while presenting a project on ___.", "My therapist said my biggest problem is my obsession with ___.",
+        "The worst flavor of Gatorade is definitely ___.", "I got dumped because I care more about ___ than relationships.",
+        "I was sent to the counselor's office for drawing ___ on my desk.", "My password for everything is just ___123.",
+        "I won the science fair by building a working model of ___.", "My dad thinks he's a genius for inventing ___.",
+        "I got fired from my first job at the mall for stealing ___.", "I was rejected from Harvard because my personal essay was about ___.",
+        "My spirit animal is literally just ___.", "I almost choked to death on ___.", "I accidentally liked my ex's post from 2019 about ___.",
+        "I’m not allowed to watch horror movies anymore after I screamed at ___.", "The most chaotic energy is entering a room and demanding ___.",
+        "My favorite conspiracy theory is that the government is hiding ___.", "I was legally banned from bringing ___ on an airplane.",
+        "My biggest fear is waking up surrounded by ___.", "I accidentally destroyed the microwave trying to heat up ___.",
+        "The most intense part of the movie was when the villain revealed ___.", "I was blocked by a celebrity on Twitter for asking about ___."
+    ];
+
+    const cpuBrain = [ "a soggy chicken nugget", "my math teacher's search history 💀", "doing the Renegade", "Shrek 2 on DVD", "three raccoons in a trenchcoat", "a suspicious looking corn dog", "getting left on read 😭", "the principal's toupee", "the school Wi-Fi router", "a half-eaten Takis bag", "my mom's minivan", "someone screaming in the hallway", "a cursed TikTok dance 🤡", "my missing AirPod", "a picture of a weird bug I found", "crying in the bathroom ✨", "a deeply uncomfortable silence", "an iPad kid watching Cocomelon", "my GPA dropping into the abyss", "eating a raw onion like an apple", "the existential dread of Monday morning" ];
+
+    function startGame() {
+        initAudio(); 
+        players = [];
+        let actualJudgeIndex = 0; let playerCounter = 0;
+        
+        for (let i = 1; i <= 5; i++) {
+            let nameInput = document.getElementById('p' + i).value.trim();
+            let isCPU = document.getElementById('c' + i).checked;
+            let isStartingJudge = document.getElementById('j' + i).checked;
+            let avatarEl = document.getElementById('a' + i);
+            
+            if (nameInput !== "" || isCPU) {
+                players.push({ 
+                    name: nameInput !== "" ? nameInput : `Bot ${i}`, 
+                    imgUrl: avatarEl.dataset.imgUrl, 
+                    isCPU: isCPU, 
+                    score: 0,
+                    hasSteal: true 
+                });
+                if (isStartingJudge) actualJudgeIndex = playerCounter;
+                playerCounter++;
+            }
+        }
+
+        if (players.length < 3) { document.getElementById('setup-error').classList.remove('hidden'); return; }
+
+        currentJudgeIndex = actualJudgeIndex;
+        availablePrompts = [...basePrompts]; 
+        
+        document.getElementById('setup-screen').classList.add('hidden');
+        roundNum = 0; startRound();
+    }
+
+    function startRound() {
+        document.getElementById('results-screen').classList.add('hidden');
+        document.getElementById('sudden-death-alert').classList.add('hidden');
+        document.getElementById('steal-alert').classList.add('hidden');
+        isTieMode = false;
+        selectedTieAnswers = [];
+        submittedAnswers = [];
+        
+        if (roundNum > 0) currentJudgeIndex = (currentJudgeIndex + 1) % players.length;
+        
+        // --- PRIORITIZE CUSTOM PROMPTS FIRST ---
+        if (customPrompts.length > 0) {
+            // Pull from user's custom prompts until they are gone
+            currentPrompt = customPrompts.shift(); // Takes the first one out of the array
+        } else {
+            // Otherwise, pull a random one from the 100+ deck
+            if (availablePrompts.length === 0) availablePrompts = [...basePrompts];
+            const randomIndex = Math.floor(Math.random() * availablePrompts.length);
+            currentPrompt = availablePrompts[randomIndex];
+            availablePrompts.splice(randomIndex, 1);
+        }
+        
+        currentSubmitterIndex = 0;
+        if (currentSubmitterIndex === currentJudgeIndex) currentSubmitterIndex++;
+
+        promptNextPlayer();
+    }
+
+    function promptNextPlayer() {
+        document.getElementById('submit-screen').classList.add('hidden');
+        if (submittedAnswers.length >= players.length - 1) { startJudging(); return; }
+
+        const submitter = players[currentSubmitterIndex];
+
+        if (submitter.isCPU) {
+            let useCpuSteal = submitter.hasSteal && Math.random() < 0.25;
+            if (useCpuSteal) submitter.hasSteal = false;
+            
+            submittedAnswers.push({ playerIndex: currentSubmitterIndex, text: cpuBrain[Math.floor(Math.random() * cpuBrain.length)], usedSteal: useCpuSteal });
+            currentSubmitterIndex++;
+            if (currentSubmitterIndex === currentJudgeIndex) currentSubmitterIndex++;
+            promptNextPlayer(); return;
+        }
+
+        const badge = document.getElementById('pass-badge');
+        setBadgeAvatar(badge, submitter); badge.querySelector('.badge-name').innerText = submitter.name;
+        document.getElementById('pass-screen').classList.remove('hidden');
+    }
+
+    function showSubmissionScreen() {
+        document.getElementById('pass-screen').classList.add('hidden');
+        const submitter = players[currentSubmitterIndex];
+        
+        const badge = document.getElementById('submit-badge');
+        setBadgeAvatar(badge, submitter); badge.querySelector('.badge-name').innerText = submitter.name;
+        document.getElementById('current-prompt').innerText = currentPrompt;
+        
+        const stealContainer = document.getElementById('steal-container');
+        if (submitter.hasSteal) {
+            stealContainer.classList.remove('hidden');
+            document.getElementById('use-steal').checked = false;
+        } else {
+            stealContainer.classList.add('hidden');
+        }
+
+        const input = document.getElementById('answer-input'); input.value = "";
+        document.getElementById('submit-screen').classList.remove('hidden'); input.focus();
+    }
+
+    function submitAnswer() {
+        const answer = document.getElementById('answer-input').value.trim();
+        if (answer === "") return;
+
+        const submitter = players[currentSubmitterIndex];
+        const isStealing = document.getElementById('use-steal').checked && submitter.hasSteal;
+        if (isStealing) submitter.hasSteal = false;
+
+        submittedAnswers.push({ playerIndex: currentSubmitterIndex, text: answer, usedSteal: isStealing });
+        currentSubmitterIndex++;
+        if (currentSubmitterIndex === currentJudgeIndex) currentSubmitterIndex++;
+
+        promptNextPlayer();
+    }
+
+    function startJudging() {
+        const judge = players[currentJudgeIndex];
+        const badge = document.getElementById('judge-badge');
+        setBadgeAvatar(badge, judge); badge.querySelector('.badge-name').innerText = judge.name;
+        document.getElementById('judge-prompt').innerText = currentPrompt;
+        document.getElementById('judge-header').innerText = "👑 Time to Judge 👑";
+        document.getElementById('judge-instructions').innerText = "Read the answers out loud and pick the best one!";
+        document.getElementById('tie-btn').classList.remove('hidden');
+
+        const container = document.getElementById('answers-container'); container.innerHTML = ""; 
+        
+        if (judge.isCPU) {
+            document.getElementById('sfx-bar').classList.add('hidden');
+            document.getElementById('judge-instructions').classList.add('hidden');
+            document.getElementById('cpu-thinking').classList.remove('hidden');
+        } else {
+            document.getElementById('sfx-bar').classList.remove('hidden');
+            document.getElementById('judge-instructions').classList.remove('hidden');
+            document.getElementById('cpu-thinking').classList.add('hidden');
+        }
+
+        const shuffledAnswers = [...submittedAnswers].sort(() => Math.random() - 0.5);
+
+        shuffledAnswers.forEach((ans, index) => {
+            const btn = document.createElement('div');
+            btn.className = 'answer-card';
+            if (judge.isCPU) btn.classList.add('disabled'); 
+            btn.innerText = ans.text;
+            btn.id = 'ans-card-' + index;
+            btn.onclick = () => handleCardClick(ans, btn);
+            container.appendChild(btn);
+        });
+
+        document.getElementById('judge-screen').classList.remove('hidden');
+
+        if (judge.isCPU) {
+            playDrumroll();
+            setTimeout(() => {
+                const randomPickIndex = Math.floor(Math.random() * shuffledAnswers.length);
+                const pickedCard = document.getElementById('ans-card-' + randomPickIndex);
+                pickedCard.style.background = 'linear-gradient(180deg, #f1c40f 0%, #e67e22 100%)'; pickedCard.style.color = '#fff'; pickedCard.style.borderColor = '#fff';
+                setTimeout(() => processWinners([shuffledAnswers[randomPickIndex]]), 1500);
+            }, 3000); 
+        }
+    }
+
+    function activateTieMode() {
+        isTieMode = true;
+        document.getElementById('judge-header').innerText = "✌️ TIE BREAKER ✌️";
+        document.getElementById('judge-instructions').innerText = "Select the TWO best answers!";
+        document.getElementById('tie-btn').classList.add('hidden');
+    }
+
+    function handleCardClick(ans, btnEl) {
+        if (!isTieMode) {
+            processWinners([ans]);
+        } else {
+            const indexInTieArray = selectedTieAnswers.findIndex(a => a.playerIndex === ans.playerIndex);
+            if (indexInTieArray > -1) {
+                selectedTieAnswers.splice(indexInTieArray, 1);
+                btnEl.classList.remove('selected-tie');
+            } else {
+                if (selectedTieAnswers.length < 2) {
+                    selectedTieAnswers.push(ans);
+                    btnEl.classList.add('selected-tie');
+                }
+                if (selectedTieAnswers.length === 2) {
+                    setTimeout(() => processWinners(selectedTieAnswers), 500);
+                }
+            }
+        }
+    }
+
+    function processWinners(winningAnswersArray) {
+        playDing(); 
+        document.getElementById('judge-screen').classList.add('hidden');
+        
+        let stealMessages = [];
+        
+        winningAnswersArray.forEach(ans => {
+            const winner = players[ans.playerIndex];
+            winner.score++;
+
+            if (ans.usedSteal) {
+                let maxOtherScore = -1;
+                let targetPlayers = [];
+                players.forEach(p => {
+                    if (p !== winner && p.score > 0) {
+                        if (p.score > maxOtherScore) { maxOtherScore = p.score; targetPlayers = [p]; }
+                        else if (p.score === maxOtherScore) { targetPlayers.push(p); }
+                    }
+                });
+
+                if (targetPlayers.length > 0) {
+                    const target = targetPlayers[Math.floor(Math.random() * targetPlayers.length)];
+                    target.score--;
+                    stealMessages.push(`⚡ ${winner.name} stole 1 pt from ${target.name}!`);
+                }
+            }
+        });
+
+        const winContainer = document.getElementById('winners-container');
+        winContainer.innerHTML = "";
+        
+        if (winningAnswersArray.length > 1) {
+            document.getElementById('results-title').innerText = "IT'S A TIE!";
+        } else {
+            document.getElementById('results-title').innerText = "WINNER!";
+        }
+
+        let completedSentences = [];
+
+        winningAnswersArray.forEach(ans => {
+            const p = players[ans.playerIndex];
+            
+            winContainer.innerHTML += `
+                <div class="player-badge" style="background: #00d2d3; box-shadow: 0 4px 0 #0097e6; transform: scale(1.2); margin: 15px 10px;">
+                    <div class="badge-avatar" style="background-image: url(${p.imgUrl});"></div> 
+                    <span class="badge-name">${p.name}</span>
+                </div>
+            `;
+            completedSentences.push(currentPrompt.replace('___', `<span style="color:#f1c40f; text-decoration: underline;">${ans.text}</span>`));
+        });
+
+        document.getElementById('winning-sentence').innerHTML = `"${completedSentences.join('"<br><br>"')}"`;
+
+        const stealAlertEl = document.getElementById('steal-alert');
+        if (stealMessages.length > 0) {
+            stealAlertEl.innerHTML = stealMessages.join('<br>');
+            stealAlertEl.classList.remove('hidden');
+            playTone(900, 'square', 0.2, 0.2); 
+        }
+
+        let maxScore = -1;
+        let leaders = [];
+        players.forEach(p => {
+            if (p.score > maxScore) { maxScore = p.score; leaders = [p]; }
+            else if (p.score === maxScore) { leaders.push(p); }
+        });
+
+        if (maxScore >= WINNING_SCORE) {
+            if (leaders.length === 1) {
+                endGame(leaders[0]);
+                return;
+            } else {
+                WINNING_SCORE = maxScore + 1;
+                document.body.classList.add('sudden-death-bg');
+                document.getElementById('sudden-death-alert').classList.remove('hidden');
+                document.getElementById('sudden-death-alert').innerHTML = `💀 SUDDEN DEATH ACTIVATED 💀<br><span style="font-size: 0.5em; color: #fff;">Win Target Increased to ${WINNING_SCORE}!</span>`;
+                playSiren();
+            }
+        }
+
+        updateScoreboard();
+        document.getElementById('results-screen').classList.remove('hidden');
+        roundNum++;
+    }
+
+    function endGame(champion) {
+        document.body.classList.remove('sudden-death-bg');
+        const winBadge = document.getElementById('ultimate-winner-badge');
+        setBadgeAvatar(winBadge, champion);
+        winBadge.querySelector('.badge-name').innerText = champion.name;
+        document.getElementById('win-reason-text').innerText = `Hit ${WINNING_SCORE} points and took the crown!`;
+        
+        const finalBoard = document.getElementById('final-scoreboard');
+        finalBoard.innerHTML = "<h3 style='margin-top:0; color: #f1c40f;'>FINAL SCORES:</h3>";
+        const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+        
+        sortedPlayers.forEach(p => {
+            finalBoard.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:1.3em; border-bottom:2px solid #8395a7; padding:12px 0; font-weight:800; color: #fff;">
+                <div style="display:flex; align-items:center;"><div style="width:35px; height:35px; border-radius:50%; background-color:#fff; border:2px solid #000; margin-right:10px; display:flex; align-items:center; justify-content:center; background-image: url(${p.imgUrl}); background-size: cover;"></div> ${p.name}</div> 
+                <span style="color:#00d2d3;">${p.score} pt${p.score !== 1 ? 's' : ''}</span>
+            </div>`;
+        });
+        document.getElementById('game-over-screen').classList.remove('hidden');
+    }
+
+    function updateScoreboard() {
+        const board = document.getElementById('scoreboard');
+        board.innerHTML = `<h3 style='margin-top:0; color: #00d2d3;'>SCOREBOARD (Playing to ${WINNING_SCORE}):</h3>`;
+        const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+        
+        sortedPlayers.forEach(p => {
+            let stealIcon = p.hasSteal ? `<span style="font-size: 0.8em; margin-left: 10px;" title="Has Steal Token">⚡</span>` : '';
+            board.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:1.2em; border-bottom:2px solid #8395a7; padding:10px 0; font-weight:800; color: #fff;">
+                <div style="display:flex; align-items:center;">
+                    <div style="width:30px; height:30px; border-radius:50%; background-color:#fff; border:2px solid #000; margin-right:10px; display:flex; align-items:center; justify-content:center; background-image: url(${p.imgUrl}); background-size: cover;"></div> 
+                    ${p.name} ${stealIcon}
+                </div> 
+                <span style="color:#f1c40f;">${p.score} pt${p.score !== 1 ? 's' : ''}</span>
+            </div>`;
+        });
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mewing Streak Simulator</title>
+<style>
+    body { 
+        font-family: 'Courier New', Courier, monospace; 
+        background-color: #121212; 
+        color: #00ffcc; 
+        text-align: center; 
+        margin-top: 50px; 
+    }
+    .game-container { 
+        border: 3px solid #00ffcc; 
+        padding: 30px; 
+        width: 450px; 
+        margin: auto; 
+        border-radius: 15px; 
+        background-color: #1e1e1e; 
+        box-shadow: 0 0 20px #00ffcc;
+        transition: box-shadow 0.3s ease, border-color 0.3s ease;
+    }
+    h1 { 
+        font-size: 26px; 
+        margin-bottom: 5px;
+    }
+    .score { 
+        font-size: 36px; 
+        font-weight: bold; 
+        margin: 10px 0; 
+        color: #ff00ff; 
+        text-shadow: 0 0 10px #ff00ff;
+    }
+    .streak { 
+        font-size: 22px; 
+        color: #ffff00; 
+        margin-bottom: 10px;
+    }
+    
+    /* 3D Guy CSS */
+    .sigma-guy-container {
+        perspective: 1000px;
+        margin: 30px auto;
+        height: 120px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    .sigma-guy {
+        font-size: 80px;
+        animation: spin 3s linear infinite;
+        transform-style: preserve-3d;
+        display: inline-block;
+        transition: all 0.5s ease;
+    }
+    @keyframes spin {
+        from { transform: rotateY(0deg); }
+        to { transform: rotateY(360deg); }
+    }
+
+    button { 
+        background-color: #00ffcc; 
+        color: #121212; 
+        border: none; 
+        padding: 20px 40px; 
+        font-size: 24px; 
+        font-weight: bold; 
+        border-radius: 10px; 
+        cursor: pointer; 
+        transition: 0.1s; 
+        box-shadow: 0 5px 0 #009977;
+        margin-top: 10px;
+    }
+    button:active { 
+        transform: translateY(5px); 
+        box-shadow: 0 0px 0 #009977; 
+    }
+    
+    /* Shake animation for game over */
+    @keyframes shake {
+        0% { transform: translateX(0); }
+        25% { transform: translateX(-10px); }
+        50% { transform: translateX(10px); }
+        75% { transform: translateX(-10px); }
+        100% { transform: translateX(0); }
+    }
+    .shake {
+        animation: shake 0.3s ease-in-out;
+    }
+
+    .timer-bar-container { 
+        width: 100%; 
+        background-color: #333; 
+        height: 25px; 
+        border-radius: 10px; 
+        margin-top: 30px; 
+        overflow: hidden; 
+        border: 2px solid #555;
+    }
+    .timer-bar { 
+        width: 100%; 
+        height: 100%; 
+        background-color: #ff0044; 
+        transition: width 0.1s linear; 
+    }
+    #status {
+        margin-top: 20px;
+        font-size: 16px;
+        color: #aaa;
+        font-weight: bold;
+        min-height: 40px; /* Prevents jumping text */
+    }
+</style>
+</head>
+<body>
+
+<div class="game-container" id="game-box">
+    <h1>🤫🧏‍♂️ Mewing Streak Simulator</h1>
+    
+    <div class="score">Aura: <span id="aura">0</span></div>
+    <div class="streak">Streak: <span id="streak">0</span> 🔥</div>
+
+    <div class="sigma-guy-container">
+        <div id="sigma-guy" class="sigma-guy">🤓</div>
+    </div>
+    
+    <button onclick="mew()">MEW</button>
+
+    <div class="timer-bar-container">
+        <div id="timer-bar" class="timer-bar"></div>
+    </div>
+    <p id="status">Close your mouth and start mewing.</p>
+</div>
+
+<script>
+    let aura = 0;
+    let streak = 0;
+    let timeLeft = 100;
+    let timerInterval = null;
+    let isCooked = false;
+
+    const shameMessages = [
+        "Bro started mouth breathing! Aura completely drained. 💀",
+        "Negative canthal tilt detected. You're cooked. 📉",
+        "You opened your mouth! Back to the beta male pipeline. 🗑️",
+        "The streak is gone. Enjoy your double chin. 😬",
+        "Looksmaxxing journey terminated. Zero Aura behavior. 🤡",
+        "Bro couldn't even maintain proper tongue posture. Pathetic. 🤓",
+        "It's over for you. Negative aura accumulated. ⚠️",
+        "Yikes. The jawline just vanished in real time. 📉💀"
+    ];
+
+    function updateDisplay() {
+        document.getElementById('aura').innerText = aura;
+        document.getElementById('streak').innerText = streak;
+        document.getElementById('timer-bar').style.width = timeLeft + '%';
+        
+        if (!isCooked) {
+            updateSigmaGuy();
+        }
+    }
+
+    function updateSigmaGuy() {
+        const guy = document.getElementById('sigma-guy');
+        const box = document.getElementById('game-box');
+        let statusText = "";
+
+        // Expanded Progression Levels
+        if (streak === 0) {
+            guy.innerText = "🤓";
+            guy.style.transform = "scale(1)";
+            box.style.boxShadow = "0 0 20px #00ffcc";
+            box.style.borderColor = "#00ffcc";
+            statusText = "Mouth breather detected. Start mewing!";
+        } else if (streak > 0 && streak <= 100) {
+            guy.innerText = "😐";
+            guy.style.textShadow = "0 0 10px #fff";
+            statusText = "Correcting tongue posture... 🤫";
+        } else if (streak > 100 && streak <= 200) {
+            guy.innerText = "😏";
+            guy.style.textShadow = "0 0 15px #00ffcc";
+            statusText = "Cheekbones are showing... 🧏‍♂️";
+        } else if (streak > 200 && streak <= 300) {
+            guy.innerText = "😎";
+            guy.style.textShadow = "0 0 20px #00ffcc";
+            guy.style.transform = "scale(1.1)";
+            statusText = "Jawline is getting sharper! 📐";
+        } else if (streak > 300 && streak <= 400) {
+            guy.innerText = "🤫";
+            guy.style.textShadow = "0 0 30px #ff00ff";
+            guy.style.transform = "scale(1.2)";
+            box.style.boxShadow = "0 0 40px #ff00ff";
+            box.style.borderColor = "#ff00ff";
+            statusText = "Peak Looksmaxxing achieved! ✨";
+        } else if (streak > 400 && streak <= 500) {
+            guy.innerText = "🗿";
+            guy.style.textShadow = "0 0 40px #ff0000";
+            guy.style.transform = "scale(1.4)";
+            box.style.boxShadow = "0 0 50px #ff0000";
+            box.style.borderColor = "#ff0000";
+            statusText = "Giga Chad Energy! 🐺";
+        } else if (streak > 500 && streak <= 600) {
+            guy.innerText = "👑🗿👑";
+            guy.style.textShadow = "0 0 50px #ffff00";
+            guy.style.transform = "scale(1.6)";
+            box.style.boxShadow = "0 0 70px #ffff00";
+            box.style.borderColor = "#ffff00";
+            statusText = "ABSOLUTE SIGMA MALE! 👑";
+        } else if (streak > 600) {
+            guy.innerText = "🌌👁️👄👁️🌌";
+            guy.style.textShadow = "0 0 70px #ffffff";
+            guy.style.transform = "scale(1.8)";
+            box.style.boxShadow = "0 0 100px #ffffff";
+            box.style.borderColor = "#ffffff";
+            statusText = "TRANSCENDENT AURA ENTITY! 🌌";
+        }
+
+        if (streak > 0) {
+            document.getElementById('status').innerText = statusText;
+            document.getElementById('status').style.color = "#aaa";
+        }
+    }
+
+    function mew() {
+        if (isCooked) {
+            // Reset the shame state so they can try again
+            isCooked = false;
+            document.getElementById('game-box').classList.remove('shake');
+        }
+
+        streak++;
+        aura += (10 + streak); 
+        timeLeft = 100; 
+
+        if (!timerInterval) {
+            timerInterval = setInterval(gameLoop, 100);
+        }
+        updateDisplay();
+    }
+
+    function triggerShame() {
+        isCooked = true;
+        const guy = document.getElementById('sigma-guy');
+        const box = document.getElementById('game-box');
+        
+        // Pick a random roast
+        const randomShame = shameMessages[Math.floor(Math.random() * shameMessages.length)];
+        
+        // Reset stats but punish aura severely
+        timeLeft = 0;
+        streak = 0;
+        aura = Math.max(0, aura - 500); // Lose up to 500 aura as punishment
+        
+        // UI Updates for Shaming
+        guy.innerText = "🤓";
+        guy.style.transform = "scale(0.8)";
+        guy.style.textShadow = "none";
+        
+        box.style.boxShadow = "0 0 20px #ff0044";
+        box.style.borderColor = "#ff0044";
+        box.classList.add('shake');
+
+        document.getElementById('status').innerText = randomShame;
+        document.getElementById('status').style.color = "#ff0044";
+
+        document.getElementById('aura').innerText = aura;
+        document.getElementById('streak').innerText = streak;
+        document.getElementById('timer-bar').style.width = '0%';
+    }
+
+    function gameLoop() {
+        if (streak > 0 && !isCooked) {
+            // Difficulty curve: timer drains much faster at high streaks
+            timeLeft -= (2 + streak * 0.08); 
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                triggerShame();
+            } else {
+                updateDisplay();
+            }
+        }
+    }
+</script>
+
+</body>
+</html>
